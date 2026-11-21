@@ -21,6 +21,8 @@
  *    เก็บย้อนหลัง BACKUP_KEEP วัน (กู้คืนได้โดย คลิกขวาที่แถบชีต › Show hidden sheets)
  *  - ไม่ยอมให้ส่งรายการว่างมาล้างชีตที่มีข้อมูล เว้นแต่แอปยืนยันมา (allowEmpty)
  *  - ใช้ LockService กันคำขอเขียนซ้อนกัน
+ *  - เลขรุ่นข้อมูล (rev): ทุกครั้งที่บันทึกโครงการ เลขรุ่นจะเพิ่ม 1 · แอปส่งเลขรุ่นที่ตัวเองเห็นล่าสุดมาด้วย (baseRev)
+ *    ถ้าไม่ตรงกับของชีต แปลว่ามีเครื่องอื่นแก้ไปแล้ว → ตอบ conflict ไม่เขียนทับ ให้ผู้ใช้เลือกเอง
  */
 
 var TOKEN = '';            // รหัสซิงก์ — เว้นว่าง '' = ไม่ตรวจรหัส (ไม่แนะนำ)
@@ -83,17 +85,26 @@ function writeAll_(data) {
       });
     });
   }
-  backupOncePerDay_(sh);
-  // เขียนข้อมูลใหม่ทับก่อน แล้วค่อยล้างส่วนเกิน — ถ้าเขียนล้มเหลว ข้อมูลเดิมยังอยู่ ไม่ได้ถูกล้างไปก่อน
+  lastBackupOk_ = backupOncePerDay_(sh);
+  // เขียนหัวตาราง + ข้อมูลใหม่ทับในคำสั่งเดียว แล้วค่อยล้างส่วนเกิน
+  // (ถ้าเขียนล้มเหลว จะไม่เหลือสภาพ "หัวตารางรุ่นใหม่อยู่เหนือแถวรูปแบบเก่า" ซึ่งทำให้อ่านคอลัมน์ผิดช่อง)
   var oldLastRow = sh.getLastRow(), oldLastCol = sh.getLastColumn();
-  sh.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
-  if (rows.length) {
-    var rng = sh.getRange(2, 1, rows.length, HEADERS.length);
-    rng.setNumberFormat('@');   // เก็บทุกคอลัมน์เป็นข้อความ กัน Sheets แปลง "2026-06-18" เป็นวันที่/ISO อัตโนมัติ
-    rng.setValues(rows);
-  }
-  clearLeftover_(sh, rows.length + 1, HEADERS.length, oldLastRow, oldLastCol);
+  var all = [HEADERS].concat(rows);
+  var rng = sh.getRange(1, 1, all.length, HEADERS.length);
+  rng.setNumberFormat('@');   // เก็บทุกคอลัมน์เป็นข้อความ กัน Sheets แปลง "2026-06-18" เป็นวันที่/ISO อัตโนมัติ
+  rng.setValues(all);
+  clearLeftover_(sh, all.length, HEADERS.length, oldLastRow, oldLastCol);
   return data ? data.length : 0;
+}
+
+var lastBackupOk_ = true;   // ผลการสำรองของคำขอนี้ ส่งกลับให้แอปแจ้งผู้ใช้ถ้าสำรองไม่สำเร็จ
+
+// เลขรุ่นของข้อมูลโครงการ เก็บใน Script Properties
+function getRev_() {
+  return parseInt(PropertiesService.getScriptProperties().getProperty('rev_PileLine') || '0', 10) || 0;
+}
+function setRev_(n) {
+  PropertiesService.getScriptProperties().setProperty('rev_PileLine', String(n));
 }
 
 // ล้างแถว/คอลัมน์เก่าที่เกินจากข้อมูลชุดใหม่ (usedRows นับรวมแถวหัวตาราง)
@@ -107,23 +118,28 @@ function clearLeftover_(sh, usedRows, usedCols, oldLastRow, oldLastCol) {
 }
 
 // สำรองชีตก่อนเขียนทับ วันละ 1 ครั้ง (ครั้งแรกของวัน = สภาพก่อนการแก้ไขของวันนั้น)
+// คืน true = มีสำรองของวันนี้แล้ว หรือยังไม่มีข้อมูลให้สำรอง · false = สร้างสำรองไม่สำเร็จ (การบันทึกยังทำต่อ แต่แอปจะแจ้งผู้ใช้)
 function backupOncePerDay_(sh) {
+  var ss, base, name;
   try {
-    if (sh.getLastRow() < 2) return;   // ไม่มีข้อมูลให้สำรอง
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var base = BACKUP_PREFIX + sh.getName() + '_';
-    var name = base + Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
-    if (ss.getSheetByName(name)) return;
+    if (sh.getLastRow() < 2) return true;   // ไม่มีข้อมูลให้สำรอง
+    ss = SpreadsheetApp.getActiveSpreadsheet();
+    base = BACKUP_PREFIX + sh.getName() + '_';
+    name = base + Utilities.formatDate(new Date(), ss.getSpreadsheetTimeZone(), 'yyyy-MM-dd');
+    if (ss.getSheetByName(name)) return true;
     var copy = sh.copyTo(ss);
     copy.setName(name);
     copy.hideSheet();
-    // ลบชีตสำรองที่เก่าเกิน BACKUP_KEEP วัน (เฉพาะชีตที่สคริปต์นี้สร้างเอง ดูจากชื่อ)
+  } catch (err) {
+    return false;
+  }
+  try {
+    // ลบชีตสำรองที่เก่าเกิน BACKUP_KEEP วัน (เฉพาะชีตที่สคริปต์นี้สร้างเอง ดูจากชื่อ) — ลบไม่สำเร็จไม่ถือว่าสำรองล้ม
     var olds = ss.getSheets().filter(function (s) { return s.getName().indexOf(base) === 0; })
       .sort(function (a, b) { return a.getName() < b.getName() ? -1 : 1; });
     for (var i = 0; i < olds.length - BACKUP_KEEP; i++) ss.deleteSheet(olds[i]);
-  } catch (err) {
-    // สำรองไม่สำเร็จไม่ควรทำให้การบันทึกหลักล้ม
-  }
+  } catch (err2) {}
+  return true;
 }
 
 function authorized_(token) {
@@ -165,11 +181,11 @@ function writeAppData_(data) {
   var rows = keys.map(function (k) {
     return [k, JSON.stringify(data && data[k] != null ? data[k] : (k === 'arProjects' || k === 'arReceiveDates' || k === 'arNotes' || k === 'arPromiseDates' || k === 'arCollectStatus' ? {} : null)), new Date().toISOString()];
   });
-  backupOncePerDay_(sh);
+  lastBackupOk_ = backupOncePerDay_(sh);
   var oldLastRow = sh.getLastRow(), oldLastCol = sh.getLastColumn();
-  sh.getRange(1, 1, 1, 3).setValues([['key','json','updatedAt']]);
-  sh.getRange(2, 1, rows.length, 3).setNumberFormat('@').setValues(rows);
-  clearLeftover_(sh, rows.length + 1, 3, oldLastRow, oldLastCol);
+  var all = [['key','json','updatedAt']].concat(rows);
+  sh.getRange(1, 1, all.length, 3).setNumberFormat('@').setValues(all);
+  clearLeftover_(sh, all.length, 3, oldLastRow, oldLastCol);
   return rows.length;
 }
 
@@ -180,6 +196,8 @@ function doGet(e) {
     if (e && e.parameter && e.parameter.action === 'loadAppData') {
       return json_({ ok: true, data: readAppData_() });
     }
+    // แอปรุ่นใหม่ขอ v=2 → ได้ข้อมูลพร้อมเลขรุ่น · แอปรุ่นเก่ายังได้รายการแบบเดิม
+    if (e && e.parameter && e.parameter.v === '2') return json_({ ok: true, data: readAll_(), rev: getRev_() });
     return json_(readAll_());
   } catch (err) {
     return json_({ ok: false, error: String(err) });
@@ -201,10 +219,20 @@ function doPost(e) {
         if (!body.data.length && !body.allowEmpty && getSheet_().getLastRow() > 1) {
           return json_({ ok: false, error: 'refuse_empty' });
         }
-        return json_({ ok: true, saved: writeAll_(body.data) });
+        // มีเครื่องอื่นบันทึกไปแล้วหลังจากที่เครื่องนี้ดึงข้อมูล → ไม่เขียนทับ (เว้นแต่ผู้ใช้สั่ง force เอง)
+        var cur = getRev_();
+        if (!body.force && body.baseRev != null && Number(body.baseRev) !== cur) {
+          return json_({ ok: false, error: 'conflict', rev: cur });
+        }
+        var n = writeAll_(body.data);
+        setRev_(cur + 1);
+        SpreadsheetApp.flush();   // ให้การเขียนลงชีตเสร็จจริงก่อนปล่อยคิว
+        return json_({ ok: true, saved: n, rev: cur + 1, backup: lastBackupOk_ });
       }
       if (!body.data || typeof body.data !== 'object') return json_({ ok: false, error: 'bad data' });
-      return json_({ ok: true, saved: writeAppData_(body.data) });
+      var m = writeAppData_(body.data);
+      SpreadsheetApp.flush();
+      return json_({ ok: true, saved: m, backup: lastBackupOk_ });
     } finally {
       lock.releaseLock();
     }

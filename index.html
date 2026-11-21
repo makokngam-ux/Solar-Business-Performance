@@ -1028,7 +1028,7 @@ body{min-height:100dvh;background-repeat:no-repeat;background-color:#f5f7fa}
 }
 @media(max-width:560px){
   /* ตารางบนมือถือ → การ์ดรายการ: ชื่อ · สถานะ+มูลค่า · PI+วันปิด เห็นครบโดยไม่ต้องเลื่อนข้าง */
-  .tbl-scroll{overflow:visible}
+  .tbl-scroll:has(> .pipe-tbl){overflow:visible}   /* เฉพาะตารางหลัก — ตารางสินค้าในบิลยังต้องเลื่อนข้างได้ */
   .pipe-tbl{display:block;min-width:0;width:100%}
   .pipe-tbl thead{display:block}
   .pipe-tbl thead tr{display:flex;gap:6px;overflow-x:auto;padding:9px 10px;background:#eef4f8;scrollbar-width:none}
@@ -1470,6 +1470,8 @@ const $ = id => document.getElementById(id);
 const uid = () => 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 // id ถูกแทรกลงใน onclick ของแถว/การ์ด — กรองให้เหลือเฉพาะอักขระปลอดภัย กันโค้ดแปลกปลอมจาก Sheet/ไฟล์สำรอง
 const safeId = v => { const t=String(v==null?'':v).replace(/[^A-Za-z0-9_.:-]/g,''); return t||uid(); };
+// หลังกรองอักขระ id สองตัวอาจกลายเป็นค่าเดียวกัน → ตัวที่ซ้ำได้ id ใหม่ กันแก้/ลบผิดรายการ
+function uniqIds(arr){ const seen=new Set(); arr.forEach(p=>{ while(seen.has(p.id)) p.id=uid(); seen.add(p.id); }); return arr; }
 const esc = s => (s==null?'':String(s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmtTHB = n => { n=Number(n)||0; if(n>=1e6) return '฿'+(n/1e6).toFixed(2)+'M'; return '฿'+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); };
 const fmtFull = n => '฿'+(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -1575,7 +1577,7 @@ function icons(){
 }
 
 /* ===================== STORAGE ===================== */
-function load(){ try{DATA=(JSON.parse(localStorage.getItem(LS))||[]).map(p=>({...p,id:safeId(p.id),activities:normalizeActivities(p.activities)}))}catch(e){DATA=[]} purgeSamples(); migrateTypes(); migrateStages(); migratePiDates(); migrateDateFormats(); migrateGoalTarget(); hydratePiItems(); recomputeKwp(); }
+function load(){ try{DATA=uniqIds((JSON.parse(localStorage.getItem(LS))||[]).map(p=>({...p,id:safeId(p.id),activities:normalizeActivities(p.activities)})))}catch(e){DATA=[]} purgeSamples(); migrateTypes(); migrateStages(); migratePiDates(); migrateDateFormats(); migrateGoalTarget(); hydratePiItems(); recomputeKwp(); }
 function hydratePiItems(){
   const byRef=PI_ITEMS.byRef||{}; let changed=false;
   DATA.forEach(p=>{
@@ -1651,6 +1653,7 @@ function migrateStages(){
 /* ===================== INIT ===================== */
 function init(){
   load();
+  loadQuickNotes();
   // populate selects
   const fStage=$('fStage'), fType=$('fType'), formStage=$('f_stage'), formType=$('f_type');
   STAGES.forEach(s=>{ fStage.add(new Option(s.name,s.id)); formStage.add(new Option(s.name,s.id)); });
@@ -1674,7 +1677,7 @@ function init(){
   let skipSyncOnce=false;
   try{ skipSyncOnce=sessionStorage.getItem('pl_skip_sync_once')==='1'; sessionStorage.removeItem('pl_skip_sync_once'); }catch(e){}
   // มีงานแก้ที่ยังไม่ได้ส่ง (เช่น แก้ตอนออฟไลน์) → ส่งขึ้นก่อน ไม่ดึง Sheet มาทับ
-  if(syncUrl&&!skipSyncOnce){ if(isDirty()){ render(); pushNow(false); } else pullNow(true); } else { render(); }
+  if(syncUrl&&!skipSyncOnce){ if(isDirty()){ render(); pushNow(false); if(localStorage.getItem('pl_dirty_app')) pushAppData(false); } else pullNow(true); } else { render(); }
 }
 
 /* ===================== VIEW SWITCH ===================== */
@@ -3124,6 +3127,7 @@ function delProject(){
 
 /* ===================== EXPORT ===================== */
 function exportBackup(){
+  loadQuickNotes();   // อ่านโน้ตงานด่วนจากเครื่องก่อนเสมอ (เดิมโหลดเฉพาะตอนเปิดแผงโน้ต ทำให้ไฟล์สำรองได้รายการว่าง)
   const payload={
     app:'Solar Business Performance',version:1,exportedAt:new Date().toISOString(),
     settings:{salesTarget,monthlyTargets},
@@ -3153,7 +3157,7 @@ function restoreBackup(input){
     if(!Array.isArray(raw)||raw.length>10000){toast('ไม่พบข้อมูลโครงการที่ถูกต้อง','err');return;}
     const hasExtra=!!(payload&&typeof payload==='object'&&(payload.salesHistory||payload.claims||payload.arData||payload.arProjects||payload.arReceiveDates||payload.arNotes||payload.arPromiseDates||payload.arCollectStatus));
     if(!confirm(`พบข้อมูลสำรอง ${raw.length} โครงการ${hasExtra?' พร้อมข้อมูลยอดขาย/เคลม/ลูกหนี้':''}\n\nข้อมูลปัจจุบันในเครื่องนี้จะถูกแทนที่${syncUrl?' และจะส่งขึ้น Google Sheet ด้วย':''} ต้องการกู้คืนหรือไม่?`))return;
-    DATA=raw.filter(p=>p&&typeof p==='object').map(p=>({...p,id:safeId(p.id),products:Array.isArray(p.products)?p.products:[],lineItems:Array.isArray(p.lineItems)?p.lineItems:[],activities:normalizeActivities(p.activities)}));
+    DATA=raw.filter(p=>p&&typeof p==='object').map(p=>({...p,id:safeId(p.id),products:Array.isArray(p.products)?p.products:[],lineItems:Array.isArray(p.lineItems)?p.lineItems:[],activities:normalizeActivities(p.activities)})); uniqIds(DATA);
     if(payload.settings&&Number.isFinite(+payload.settings.salesTarget)){salesTarget=Math.max(0,+payload.settings.salesTarget);if(salesTarget)localStorage.setItem('pl_target',String(salesTarget));else localStorage.removeItem('pl_target');}
     if(payload.settings&&Array.isArray(payload.settings.monthlyTargets)){monthlyTargets=Array.from({length:12},(_,i)=>Math.max(0,+payload.settings.monthlyTargets[i]||0));localStorage.setItem('pl_monthly_targets',JSON.stringify(monthlyTargets));}
     if(payload.salesHistory&&Array.isArray(payload.salesHistory.years)){SALES_HISTORY=payload.salesHistory;try{localStorage.setItem('pl_sales_data',JSON.stringify(SALES_HISTORY));}catch(e){}}
@@ -3168,6 +3172,7 @@ function restoreBackup(input){
     migrateTypes();migrateStages();migratePiDates();hydratePiItems();const saved=persist();localStorage.setItem('pl_updated',String(Date.now()));closeSettings();render();
     if(!saved)return;   // persist แจ้งข้อผิดพลาดเองแล้ว — ไม่บอกว่าสำเร็จ และไม่ส่งขึ้น Sheet
     toast(`กู้คืนข้อมูลทั้งแอปสำเร็จ · ${DATA.length} โครงการ`,'ok');
+    _localGen++;
     if(syncUrl){markDirty();pushNow(false);pushAppData(false);}
   };
   rd.onerror=()=>toast('อ่านไฟล์สำรองไม่สำเร็จ','err'); rd.readAsText(file,'utf-8');
@@ -3731,22 +3736,41 @@ function arAgingBucket(days){
   return 'เกิน 365 วัน';
 }
 function parseARReportText(text,fileName){
-  const rows=[], lines=String(text||'').split(/\r?\n/).map(s=>s.replace(/\u0000/g,'').replace(/ /g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
-  const numRe=/^\(?-?\d{1,3}(?:,\d{3})*(?:\.\d+)?\)?$/;
+  const rows=[], raw=String(text||'').split(/\r?\n/).map(s=>s.replace(/\u0000/g,'').replace(/ /g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
+  const codeRe=/^([A-Z]-\d{5})(?!\d)\s*/, dateRe=/\d{2}\/\d{2}\/25\d{2}/;
+  const numRe=/^\(?-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\)?$/;   // รับทั้ง 1,234.50 และ 1234.50
+  const odRe=/^(?:--|-?\d+)$/;                                     // วันเกินกำหนด: จำนวนเต็ม ติดลบได้ หรือ -- (ยังไม่ครบกำหนด)
+  // ชื่อบริษัทยาวจนขึ้นบรรทัดใหม่: บรรทัดที่ขึ้นต้นด้วยรหัสแต่ยังไม่มีวันที่ ให้ต่อกับบรรทัดถัดไปจนเจอวันที่
+  const lines=[];
+  for(let k=0;k<raw.length;k++){
+    let line=raw[k];
+    if(codeRe.test(line)&&!dateRe.test(line)){
+      let n=0;
+      while(n<3&&k+1<raw.length&&!codeRe.test(raw[k+1])&&!dateRe.test(line)){ line+=' '+raw[++k]; n++; }
+    }
+    lines.push(line);
+  }
+  let bad=0, candidates=0;
   lines.forEach((line,idx)=>{
-    if(!/^[A-Z]-\d{5}\s+/.test(line) || !/\d{2}\/\d{2}\/25\d{2}/.test(line)) return;
-    const dateM=line.match(/\d{2}\/\d{2}\/25\d{2}/); if(!dateM) return;
+    if(!codeRe.test(line)) return;
+    candidates++;
+    const fail=()=>{ bad++; };
+    const dateM=line.match(dateRe); if(!dateM) return fail();
     const before=line.slice(0,dateM.index).trim(), after=line.slice(dateM.index+dateM[0].length).trim();
-    const code=(before.match(/^([A-Z]-\d{5})\s+/)||[])[1]; if(!code) return;
-    const company=before.replace(/^([A-Z]-\d{5})\s+/,'').trim();
-    const parts=after.split(' '); if(parts.length<4) return;
+    const code=(before.match(codeRe)||[])[1]; if(!code) return fail();
+    const company=before.replace(codeRe,'').trim(); if(!company) return fail();
+    const parts=after.split(' '); if(parts.length<3) return fail();
     let invoice=parts.shift();
     if(/-$/.test(invoice) && parts[0] && /^\d{3}$/.test(parts[0])) invoice+=parts.shift();
-    const overdueIdx=parts.findIndex((p,i)=>/^\d+$/.test(p) && i>0 && parts.slice(0,i).some(x=>numRe.test(x)));
-    if(overdueIdx<0) return;
+    // วันเกินกำหนด = ตัวเลขจำนวนเต็ม (หรือ --) ตัวสุดท้ายที่ตามหลังยอดเงิน และหลังจากนั้นไม่มีตัวเลขอีก (เหลือแต่ชื่อพนักงาน)
+    let overdueIdx=-1;
+    for(let q=parts.length-1;q>0;q--){
+      if(odRe.test(parts[q]) && !parts.slice(q+1).some(x=>numRe.test(x)||odRe.test(x)) && parts.slice(0,q).some(x=>numRe.test(x))){ overdueIdx=q; break; }
+    }
+    if(overdueIdx<0) return fail();
     const amountTokens=parts.slice(0,overdueIdx).filter(x=>numRe.test(x));
-    if(!amountTokens.length) return;
-    const overdue=+parts[overdueIdx]||0, salesperson=parts.slice(overdueIdx+1).join(' ')||'—';
+    if(!amountTokens.length) return fail();
+    const overdue=parts[overdueIdx]==='--'?0:(parseInt(parts[overdueIdx],10)||0), salesperson=parts.slice(overdueIdx+1).join(' ')||'—';
     const balance=parseMoneyTH(amountTokens.at(-1)), debt=parseMoneyTH(amountTokens[0]);
     const paid=amountTokens.length>=3?parseMoneyTH(amountTokens.at(-2)):0;
     const adj=amountTokens.length>=4?parseMoneyTH(amountTokens.at(-3)):0;
@@ -3754,11 +3778,13 @@ function parseARReportText(text,fileName){
     rows.push({key:invoice, debtorCode:code, company, invoiceDate:`${y}-${dm[2]}-${dm[1]}`, invoiceNo:invoice, debt, adjustment:adj, paid, balance, overdueDays:overdue, aging:arAgingBucket(overdue), salesperson, rowNo:idx+1});
   });
   if(!rows.length) throw new Error('อ่านรายการลูกหนี้จากไฟล์นี้ไม่ได้ — รูปแบบรายงานไม่ตรงกับที่แอปรู้จัก (ต้องมีรหัสลูกหนี้ เช่น C-00123 และวันที่ พ.ศ. ในแต่ละบรรทัด)');
-  // วันที่ของรอบรายงาน: ใช้วันที่ในหัวรายงาน (ก่อนบรรทัดรายการแรก) ถ้ามี ไม่งั้นค่อยดูจากชื่อไฟล์
+  // อ่านได้ไม่ครบ = ไม่นำเข้าเลย เพราะใบที่ตกหล่นจะถูกแสดงว่า "ปิดแล้ว" ทั้งที่ยังค้างอยู่
+  if(bad) throw new Error(`อ่านรายการลูกหนี้ได้ไม่ครบ: ${bad} จาก ${candidates} บรรทัดอ่านไม่ออก จึงยังไม่นำเข้า — ขอไฟล์ Excel จากบัญชี หรือส่งไฟล์นี้ให้ปรับรูปแบบการอ่าน`);
+  // วันที่ของรอบรายงาน: ใช้วันที่ในหัวรายงาน (ก่อนบรรทัดรายการแรก) ถ้าเป็นช่วงวันที่ ใช้วันสุดท้าย · ไม่มีค่อยดูจากชื่อไฟล์
   let headDate='';
   for(const line of lines){
-    if(/^[A-Z]-\d{5}\s+/.test(line)) break;
-    const hm=line.match(/(\d{1,2})\/(\d{1,2})\/(25\d{2}|20\d{2})/);
+    if(codeRe.test(line)) break;
+    const all=[...line.matchAll(/(\d{1,2})\/(\d{1,2})\/(25\d{2}|20\d{2})/g)]; const hm=all.at(-1);
     if(hm){ let hy=+hm[3]; if(hy>2400) hy-=543; headDate=`${hy}-${String(+hm[2]).padStart(2,'0')}-${String(+hm[1]).padStart(2,'0')}`; }
   }
   return {source:fileName, date:headDate||arDateFromFileName(fileName), importedAt:new Date().toISOString(), rows};
@@ -3824,7 +3850,7 @@ function loadPdfJs(){
 // อ่านข้อความจาก PDF แล้วเรียงกลับเป็น "บรรทัด" ตามตำแหน่งบนหน้า (ซ้าย→ขวา บน→ล่าง) ให้ parseARReportText ใช้ต่อได้
 async function extractPdfText(buf){
   const pdfjs=await loadPdfJs();
-  const doc=await pdfjs.getDocument({data:new Uint8Array(buf.slice(0))}).promise;   // ส่งสำเนา เพราะ pdf.js ย้ายบัฟเฟอร์ไปให้ worker
+  const doc=await pdfjs.getDocument({data:new Uint8Array(buf.slice(0)),isEvalSupported:false}).promise;   // ส่งสำเนา เพราะ pdf.js ย้ายบัฟเฟอร์ไปให้ worker
   const lines=[]; let glyphs=0;
   for(let n=1;n<=doc.numPages;n++){
     const page=await doc.getPage(n), tc=await page.getTextContent();
@@ -4087,7 +4113,7 @@ function emptyState(){
 let syncBusy=false;
 function updateSyncUI(){
   const pill=$('syncPill');
-  if(syncUrl){ pill.classList.add('on'); $('syncTxt').textContent=isDirty()?'รอส่งขึ้น Sheet':(localStorage.getItem('pl_sync_success')?'ซิงก์แล้ว':'เชื่อม Sheet แล้ว'); $('discBtn').style.display='inline-flex'; }
+  if(syncUrl){ pill.classList.add('on'); $('syncTxt').textContent=localStorage.getItem('pl_conflict')?'ข้อมูลชนกัน':isDirty()?'รอส่งขึ้น Sheet':(localStorage.getItem('pl_sync_success')?'ซิงก์แล้ว':'เชื่อม Sheet แล้ว'); $('discBtn').style.display='inline-flex'; }
   else { pill.classList.remove('on'); $('syncTxt').textContent='เชื่อมต่อ Sheet'; $('discBtn').style.display='none'; }
   updateMobileSyncStatus();
 }
@@ -4111,7 +4137,7 @@ function fillMonthlyFromAnnual(){
 }
 function openSettings(){ $('f_syncurl').value=syncUrl; $('f_synctoken').value=syncToken; $('f_target').value=fmtComma(salesTarget); renderMonthlyTargetInputs(); $('setOv').classList.add('show'); icons(); }
 function closeSettings(){ $('setOv').classList.remove('show'); }
-function disconnectSync(){ syncUrl=''; localStorage.removeItem('pl_syncurl'); localStorage.removeItem('pl_sync_success'); localStorage.removeItem('pl_dirty'); updateSyncUI(); closeSettings(); toast('ตัดการเชื่อมต่อแล้ว'); }
+function disconnectSync(){ syncUrl=''; localStorage.removeItem('pl_syncurl'); localStorage.removeItem('pl_sync_success'); localStorage.removeItem('pl_dirty'); localStorage.removeItem('pl_rev'); localStorage.removeItem('pl_conflict'); localStorage.removeItem('pl_dirty_app'); updateSyncUI(); closeSettings(); toast('ตัดการเชื่อมต่อแล้ว'); }
 function saveSettings(){
   const prevUrl=syncUrl;
   syncUrl=$('f_syncurl').value.trim();
@@ -4133,18 +4159,19 @@ async function connectSheet(prevUrl){
   const revert=()=>{ syncUrl=prevUrl||''; if(syncUrl) localStorage.setItem('pl_syncurl',syncUrl); else localStorage.removeItem('pl_syncurl'); updateSyncUI(); };
   let remote=null; setBusy(true);
   try{
-    const r=await fetch(syncQS('load')); const j=await r.json();
+    const r=await fetch(syncQS('load')+'&v=2'); const j=await r.json();
     if(j&&j.ok===false) throw new Error(j.error||'load failed');
     remote=Array.isArray(j)?j:(j&&Array.isArray(j.data)?j.data:null);
+    if(j&&!Array.isArray(j)&&j.rev!=null) localStorage.setItem('pl_rev',String(j.rev)); else localStorage.removeItem('pl_rev');
     if(!remote) throw new Error('bad response');
   }catch(e){ setBusy(false); revert(); toast(syncErrText(e,'เชื่อมต่อไม่สำเร็จ — ตรวจ URL')+' · ยังไม่ได้เชื่อม','err'); return; }
   setBusy(false);
   localStorage.removeItem('pl_sync_success');
-  if(!remote.length){ await pushNow(true); await pushAppData(false); return; }   // Sheet ว่าง → ส่งข้อมูลเครื่องนี้ขึ้นได้
+  if(!remote.length){ await pushNow(true); await syncAppDataOnConnect(); return; }   // Sheet ว่าง → ส่งข้อมูลเครื่องนี้ขึ้นได้
   if(!DATA.length || confirm(`Sheet นี้มีข้อมูลอยู่แล้ว ${remote.length} โครงการ · เครื่องนี้มี ${DATA.length} โครงการ\n\nกด OK = ใช้ข้อมูลจาก Sheet (โครงการในเครื่องนี้จะถูกแทนที่)\nกด Cancel = ไม่ใช้ข้อมูลจาก Sheet`)){
     localStorage.removeItem('pl_dirty'); await pullNow(false); return;
   }
-  if(confirm(`ต้องการส่ง ${DATA.length} โครงการในเครื่องนี้ขึ้นไปแทนที่ ${remote.length} โครงการใน Sheet หรือไม่?\n\nกด Cancel = ยกเลิกการเชื่อมต่อ ไม่มีอะไรถูกเปลี่ยน`)){ await pushNow(true); await pushAppData(false); return; }
+  if(confirm(`ต้องการส่ง ${DATA.length} โครงการในเครื่องนี้ขึ้นไปแทนที่ ${remote.length} โครงการใน Sheet หรือไม่?\n\nกด Cancel = ยกเลิกการเชื่อมต่อ ไม่มีอะไรถูกเปลี่ยน`)){ await pushNow(true,true); await syncAppDataOnConnect(); return; }
   revert(); toast('ยกเลิกการเชื่อมต่อ — ข้อมูลทั้งสองฝั่งไม่ถูกเปลี่ยน');
 }
 function syncQS(action){ return syncUrl+'?action='+action+(syncToken?'&token='+encodeURIComponent(syncToken):'')+'&t='+Date.now(); }
@@ -4152,12 +4179,13 @@ function syncErrText(e,fallback){
   const m=String(e&&e.message||'');
   if(m==='unauthorized') return 'รหัสซิงก์ไม่ถูกต้อง — ตรวจรหัสในหน้าตั้งค่า';
   if(m==='refuse_empty') return 'Sheet มีข้อมูลอยู่ จึงไม่ส่งข้อมูลว่างขึ้นทับ';
+  if(m==='conflict') return 'ข้อมูลใน Sheet ถูกแก้จากเครื่องอื่น — กดซิงก์เพื่อเลือกว่าจะใช้ชุดไหน';
   return fallback;
 }
 async function syncPost(body){
   const r=await fetch(syncUrl,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(syncToken?{...body,token:syncToken}:body)});
   const j=await r.json();
-  if(j&&j.ok===false) throw new Error(j.error||'sync failed');
+  if(j&&j.ok===false){ const er=new Error(j.error||'sync failed'); er.rev=j.rev; throw er; }
   return j;
 }
 // ธง "มีการแก้ไขที่ยังไม่ได้ส่งขึ้น Sheet" — กันการดึง Sheet มาทับงานที่แก้ตอนออฟไลน์
@@ -4165,18 +4193,46 @@ function isDirty(){ return !!localStorage.getItem('pl_dirty'); }
 function markDirty(){ try{ localStorage.setItem('pl_dirty',String(Date.now())+Math.random().toString(36).slice(2,6)); }catch(e){} }
 function setBusy(b){ syncBusy=b; $('syncPill').classList.toggle('busy',b); }
 
-async function pushNow(showToast){
+// ส่งขึ้น Sheet ทีละคำขอเสมอ: ถ้ามีการแก้ระหว่างที่คำขอก่อนยังไม่จบ จะส่งชุดล่าสุดต่อท้ายอีกรอบ (กันคำขอเก่ามาถึงทีหลังแล้วทับชุดใหม่)
+// baseRev = เลขรุ่นของ Sheet ที่เครื่องนี้เห็นล่าสุด — ถ้า Sheet ถูกแก้จากเครื่องอื่นไปแล้ว หลังบ้านจะปฏิเสธ (conflict) แทนการทับ
+let _pushing=false,_pushAgain=false,_localGen=0;
+async function pushNow(showToast,force){
   if(!syncUrl) return;
-  setBusy(true);
+  if(_pushing){ _pushAgain=true; return; }
+  _pushing=true; setBusy(true);
   try{
-    const stamp=localStorage.getItem('pl_dirty');
-    // allowEmpty: เครื่องที่ยังไม่เคยซิงก์สำเร็จ ห้ามส่งรายการว่างไปล้าง Sheet ที่มีข้อมูล
-    await syncPost({action:'save',data:DATA,allowEmpty:!!localStorage.getItem('pl_sync_success')});
-    if(localStorage.getItem('pl_dirty')===stamp) localStorage.removeItem('pl_dirty');   // ถ้ามีการแก้ใหม่ระหว่างส่ง ยังถือว่าค้างส่ง
-    markSyncSuccess();
+    do{
+      _pushAgain=false;
+      const stamp=localStorage.getItem('pl_dirty'), base=localStorage.getItem('pl_rev');
+      // allowEmpty: เครื่องที่ยังไม่เคยซิงก์สำเร็จ ห้ามส่งรายการว่างไปล้าง Sheet ที่มีข้อมูล
+      const body={action:'save',data:DATA,allowEmpty:!!localStorage.getItem('pl_sync_success')};
+      if(force) body.force=true; else if(base!==null&&base!=='') body.baseRev=+base;
+      force=false;
+      const j=await syncPost(body);
+      if(j&&j.rev!=null) localStorage.setItem('pl_rev',String(j.rev));
+      if(localStorage.getItem('pl_dirty')===stamp) localStorage.removeItem('pl_dirty');   // ถ้ามีการแก้ใหม่ระหว่างส่ง ยังถือว่าค้างส่ง
+      localStorage.removeItem('pl_conflict');
+      markSyncSuccess();
+      if(j&&j.backup===false) toast('ซิงก์แล้ว แต่ Sheet สร้างชีตสำรองของวันนี้ไม่สำเร็จ','err');
+    }while(_pushAgain);
     if(showToast) toast('ซิงก์ขึ้น Sheet แล้ว','ok');
-  }catch(e){ updateSyncUI(); if(showToast) toast(syncErrText(e,'ซิงก์ไม่สำเร็จ — ตรวจ URL'),'err'); }
-  setBusy(false);
+  }catch(e){
+    _pushing=false; setBusy(false); updateSyncUI();
+    if(e&&e.message==='conflict'){ resolveSyncConflict(showToast); return; }
+    if(showToast) toast(syncErrText(e,'ซิงก์ไม่สำเร็จ — ตรวจ URL'),'err');
+    return;
+  }
+  _pushing=false; setBusy(false);
+}
+// Sheet ถูกแก้จากเครื่องอื่นหลังจากเครื่องนี้ดึงครั้งล่าสุด → ให้ผู้ใช้เลือกเอง ไม่ทับให้เงียบ ๆ
+async function resolveSyncConflict(manual){
+  if(localStorage.getItem('pl_conflict')&&!manual){ updateSyncUI(); return; }   // ถามไปแล้วรอบหนึ่ง ไม่ถามซ้ำทุกครั้งที่บันทึก
+  localStorage.setItem('pl_conflict','1'); updateSyncUI();
+  if(confirm('ข้อมูลใน Sheet ถูกแก้จากเครื่องอื่น หลังจากที่เครื่องนี้ดึงข้อมูลครั้งล่าสุด\n\nกด OK = ใช้ข้อมูลจาก Sheet (การแก้ไขที่ยังไม่ได้ส่งของเครื่องนี้จะหาย)\nกด Cancel = ยังไม่ดึง')){
+    localStorage.removeItem('pl_dirty'); localStorage.removeItem('pl_conflict'); await pullNow(false); return;
+  }
+  if(confirm('ต้องการส่งข้อมูลของเครื่องนี้ขึ้นไปทับ Sheet แทนหรือไม่?\n(การแก้ไขจากเครื่องอื่นที่อยู่ใน Sheet จะหาย · Sheet มีชีตสำรองรายวันอยู่)\n\nกด Cancel = ยังไม่ทำอะไร ข้อมูลในเครื่องนี้ยังอยู่ และยังไม่ถูกส่ง')){ await pushNow(true,true); return; }
+  toast('ยังไม่ได้ซิงก์ — กด "บันทึก & ซิงก์" ในหน้าตั้งค่าเมื่อพร้อมเลือก','err');
 }
 function appDataPayload(){
   return {arData:AR_DATA,arProjects:AR_PROJECTS,arReceiveDates:AR_RECEIVE_DATES,arNotes:AR_NOTES,arPromiseDates:AR_PROMISE_DATES,arCollectStatus:AR_COLLECT_STATUS,claims:CLAIMS};
@@ -4203,15 +4259,39 @@ function applyAppDataPayload(data){
   if(data.claims && Array.isArray(data.claims.rows)){ CLAIMS=data.claims; saveClaims(CLAIMS); changed=true; }
   return changed;
 }
+// ข้อมูลลูกหนี้/เคลมมีธง "ค้างส่ง" ของตัวเอง (pl_dirty_app) — ถ้าส่งไม่สำเร็จ การเปิดแอปครั้งถัดไปจะส่งก่อน ไม่ดึง Sheet มาทับ
+let _appPushing=false,_appPushAgain=false;
 async function pushAppData(showToast){
   if(!syncUrl) return;
-  setBusy(true);
+  const stamp=String(Date.now())+Math.random().toString(36).slice(2,6);
+  try{ localStorage.setItem('pl_dirty_app',stamp); }catch(e){}
+  if(_appPushing){ _appPushAgain=true; return; }
+  _appPushing=true; setBusy(true);
   try{
-    await syncPost({action:'saveAppData',data:appDataPayload()});
-    markSyncSuccess();
+    do{
+      _appPushAgain=false;
+      const st=localStorage.getItem('pl_dirty_app');
+      await syncPost({action:'saveAppData',data:appDataPayload()});
+      if(localStorage.getItem('pl_dirty_app')===st) localStorage.removeItem('pl_dirty_app');
+      markSyncSuccess();
+    }while(_appPushAgain);
     if(showToast) toast('ซิงก์ข้อมูลเสริมขึ้น Sheet แล้ว','ok');
   }catch(e){ if(showToast) toast(syncErrText(e,'ซิงก์ข้อมูลเสริมไม่สำเร็จ — ตรวจ URL/Deploy ใหม่'),'err'); }
-  setBusy(false);
+  _appPushing=false; setBusy(false);
+}
+function appDataHasContent(d){
+  if(!d||typeof d!=='object') return false;
+  if(d.arData&&Array.isArray(d.arData.snapshots)&&d.arData.snapshots.length) return true;
+  if(d.claims&&Array.isArray(d.claims.rows)&&d.claims.rows.length) return true;
+  return ['arProjects','arReceiveDates','arNotes','arPromiseDates','arCollectStatus'].some(k=>d[k]&&typeof d[k]==='object'&&Object.keys(d[k]).length);
+}
+// ตอนเชื่อม Sheet: ถ้าใน Sheet มีข้อมูลลูกหนี้/เคลมอยู่แล้ว ให้ดึงลงมา ห้ามส่งของเครื่องนี้ (ที่อาจว่าง) ขึ้นไปทับ
+async function syncAppDataOnConnect(){
+  let remote=null;
+  try{ const r=await fetch(syncQS('loadAppData')); const j=await r.json(); if(j&&j.ok!==false&&!Array.isArray(j)) remote=j.data||{}; }catch(e){}
+  if(remote===null) return;                                   // อ่านไม่ได้ (หรือหลังบ้านรุ่นเก่า) → ไม่ส่งอะไรขึ้น
+  if(appDataHasContent(remote)){ localStorage.removeItem('pl_dirty_app'); if(applyAppDataPayload(remote)) render(); return; }
+  if(appDataHasContent(appDataPayload())) await pushAppData(false);
 }
 async function pushAppDataNow(){
   if(!syncUrl){ toast('ยังไม่ได้เชื่อม Google Sheet','err'); return; }
@@ -4219,10 +4299,12 @@ async function pushAppDataNow(){
 }
 async function pullAppData(silent){
   if(!syncUrl) return false;
+  if(localStorage.getItem('pl_dirty_app')){ pushAppData(false); return false; }   // มีงานลูกหนี้/เคลมค้างส่ง → ส่งก่อน ไม่ดึงมาทับ
   try{
     const r=await fetch(syncQS('loadAppData'));
     const j=await r.json();
     if(j&&j.ok===false) throw new Error(j.error||'loadAppData failed');
+    if(localStorage.getItem('pl_dirty_app')) return false;   // มีการแก้ระหว่างรอคำตอบ
     const changed=applyAppDataPayload(j&&j.data);
     if(changed){ markSyncSuccess(); if(!silent) toast('ดึงข้อมูลลูกหนี้/เคลมจาก Sheet แล้ว','ok'); }
     return changed;
@@ -4238,10 +4320,12 @@ async function pullNow(silent){
   if(!syncUrl){ if(!silent) toast('ยังไม่ได้เชื่อมต่อ','err'); render(); return; }
   if(!silent&&isDirty()&&!confirm('เครื่องนี้มีการแก้ไขที่ยังไม่ได้ส่งขึ้น Sheet\n\nกด OK = ดึงจาก Sheet มาทับ (การแก้ไขที่ค้างอยู่จะหาย)\nกด Cancel = ยกเลิก')){ render(); return; }
   setBusy(true);
+  const gen=_localGen;   // ถ้ามีการแก้/กู้คืนระหว่างรอคำตอบ คำตอบนี้เก่าไปแล้ว ห้ามเอามาทับ
   try{
-    const r=await fetch(syncQS('load'));
+    const r=await fetch(syncQS('load')+'&v=2');
     const j=await r.json();
     if(j&&!Array.isArray(j)&&j.ok===false) throw new Error(j.error||'load failed');
+    if(gen!==_localGen||(silent&&isDirty())){ setBusy(false); render(); if(isDirty()) pushNow(false); return; }
     const arr=Array.isArray(j)?j:(j&&Array.isArray(j.data)?j.data:null);
     // Sheet ว่างแต่เครื่องนี้มีข้อมูล → ไม่ดึงความว่างมาทับเอง (อาจเป็น Sheet ผิดไฟล์หรือถูกล้าง)
     if(arr&&!arr.length&&DATA.length&&(silent||!confirm(`Sheet ว่างเปล่า แต่เครื่องนี้มี ${DATA.length} โครงการ\n\nกด OK = ล้างข้อมูลโครงการในเครื่องนี้ให้ตรงกับ Sheet\nกด Cancel = เก็บข้อมูลในเครื่องไว้`))){
@@ -4261,13 +4345,20 @@ async function pullNow(silent){
         };
       });
       migrateTypes(); migrateStages(); migrateDateFormats();   // แก้วันที่ที่ Sheet แปลงเป็น ISO datetime
-      persist(); localStorage.removeItem('pl_dirty'); markSyncSuccess(); await pullAppData(true); if(!silent) toast('ดึงข้อมูลจาก Sheet แล้ว','ok');
+      uniqIds(DATA);
+      if(!persist()){ setBusy(false); render(); return; }   // เก็บลงเครื่องไม่สำเร็จ → ไม่ถือว่าซิงก์แล้ว
+      if(!Array.isArray(j)&&j.rev!=null) localStorage.setItem('pl_rev',String(j.rev)); else localStorage.removeItem('pl_rev');
+      localStorage.removeItem('pl_dirty'); localStorage.removeItem('pl_conflict'); markSyncSuccess(); await pullAppData(true); if(!silent) toast('ดึงข้อมูลจาก Sheet แล้ว','ok');
     }
   }catch(e){ if(!silent) toast(syncErrText(e,'ดึงข้อมูลไม่สำเร็จ'),'err'); }
   setBusy(false); render();
 }
 /* commit = save local + push */
-function commit(){ persist(); localStorage.setItem('pl_updated',String(Date.now())); updateStamp(); if(syncUrl){ markDirty(); updateSyncUI(); pushNow(false); } }
+function commit(){
+  _localGen++;
+  if(!persist()) return;   // บันทึกลงเครื่องไม่สำเร็จ → ห้ามตั้งธงค้างส่ง/ส่งขึ้น (ไม่งั้นเปิดใหม่จะส่งชุดเก่าขึ้นไปทับ)
+  localStorage.setItem('pl_updated',String(Date.now())); updateStamp(); if(syncUrl){ markDirty(); updateSyncUI(); pushNow(false); }
+}
 function resetToDefaultViewState(){
   const q=$('q'), fs=$('fStage'), ft=$('fType');
   if(q) q.value=''; if(fs) fs.value=''; if(ft) ft.value='';
