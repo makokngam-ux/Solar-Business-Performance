@@ -213,6 +213,7 @@ header::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;ba
 .annual-target{position:absolute;left:6%;right:6%;border-top:2px dashed #f5b700;z-index:2;pointer-events:none}
 .annual-target span{position:absolute;left:50%;transform:translateX(-50%);top:3px;font-size:10.5px;font-weight:700;color:#946200;background:rgba(255,255,255,.94);padding:1px 4px;border-radius:3px;white-space:nowrap}
 .annual-target span.tiny{font-size:7.5px;padding:0 3px}
+.annual-amount.inbar{color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.35)}
 .annual-goal{display:inline-block;font-size:11.5px;font-weight:800;padding:1px 7px;border-radius:999px;margin-top:3px}
 .annual-goal.hit{background:var(--green-soft);color:var(--green)}
 .annual-goal.miss{background:var(--amber-soft);color:var(--amber-ink)}
@@ -2066,11 +2067,16 @@ function annualSalesChart(){
     const barColor=(target&&!isYtd)?(hit?'linear-gradient(180deg,#22c55e,#16a34a)':'linear-gradient(180deg,#fbbf24,#d99a00)'):'';
     const barPct=Math.max((+y.sales||0)/max*100,4);
     const tgtPct=target?Math.min(target/max*100,100):0;
-    // ป้ายเป้า: ปกติใต้เส้นประ · ถ้าเป้า>ยอด (แท่งเตี้ยกว่าเส้น) ดันป้ายลงมาอยู่บนแท่ง · ถ้าเส้นเตี้ยมากวางป้ายเหนือเส้น+ฟอนต์เล็ก กันล้นใต้แกน
-    let tgtLblStyle='top:3px', tgtLblCls='';
+    // ตำแหน่งป้าย: ตัวเลขยอดขายอยู่เหนือ "แท่ง" ของตัวเองเสมอ · ป้ายเป้าอยู่ที่ "เส้นประ" เสมอ (เดิมเมื่อยอดต่ำกว่าเป้า ป้ายสองตัวสลับที่กันจนอ่านผิด)
+    // gap = ระยะระหว่างยอดแท่งกับเส้นเป้า (px โดยประมาณ ใช้ความสูงกราฟบนมือถือ 160px เป็นฐานเพื่อไม่ให้ป้ายชนกัน)
+    let tgtLblStyle='top:3px', tgtLblCls='', amtBottom=Math.max(barPct,tgtPct), amtStyle='', amtCls='';
     if(target){
+      const gap=(tgtPct-barPct)*1.6;
       if(tgtPct*1.9 < 18){ tgtLblStyle='top:0;transform:translate(-50%,-50%)'; tgtLblCls='tiny'; }   // เส้นเตี้ยมาก → จัดป้ายคร่อมเส้นพอดี
-      else if(barPct < tgtPct){ tgtLblStyle=`top:${Math.round(3+(tgtPct-barPct)*1.9)}px`; }
+      else if(gap>=46){ amtBottom=barPct; }                                 // ห่างพอ: ยอดเหนือแท่ง · เป้าใต้เส้น
+      else if(gap>=22){ amtBottom=barPct; tgtLblStyle='top:-21px'; }        // ค่อนข้างชิด: ยอดเหนือแท่ง · เป้าขยับไปอยู่เหนือเส้น
+      else if(gap>0&&barPct*1.6>=24){ amtCls=' inbar'; amtStyle=`bottom:calc(${barPct}% - 19px)`; tgtLblStyle='top:-21px'; }   // ชิดมาก: ยอดอยู่ในหัวแท่ง · เป้าเหนือเส้น
+      // ยอดถึงเป้าแล้ว (หรือแท่งเตี้ยเกินจะใส่ตัวเลข): ยอดอยู่เหนือสุด · ป้ายเป้าอยู่ใต้เส้น ทับบนแท่ง
     }
     const targetLine=target?`<div class="annual-target" style="bottom:${tgtPct}%"><span class="${tgtLblCls}" style="${tgtLblStyle}">${fmtChartTHB(target)}</span></div>`:'';
     let targetBadge='';
@@ -2078,8 +2084,7 @@ function annualSalesChart(){
     else if(target) targetBadge=`<span class="annual-goal ${hit?'hit':'miss'}">${hit?'✓ ':''}${pct}%</span>`;
     else if(isYtd) targetBadge='<span class="annual-goal ytd">YTD</span>';
     const avg=y.billCount?(+y.sales||0)/y.billCount:0;
-    const amtBottom=Math.max(barPct,tgtPct);   // ตัวเลขยอดอยู่เหนือ "แท่งหรือเส้นเป้า" อันที่สูงกว่า
-    return `<button class="annual-col" data-year="${y.year}" title="ปี ${y.year} · ${fmtTHB(y.sales)} · ${y.billCount} บิล" onclick="openSalesYear(this.dataset.year)"><div class="annual-bars">${targetLine}<span class="annual-amount" style="bottom:calc(${amtBottom}% + 7px)">${fmtChartTHB(y.sales)}</span><div class="annual-bar" style="height:${barPct}%${barColor?`;background:${barColor}`:''}"></div></div><div class="annual-label"><b>${y.year}${isYtd?' · YTD':''}</b>${targetBadge}<span class="al-bill">${y.billCount} บิล · เฉลี่ย ${fmtChartTHB(avg)}</span></div></button>`;
+    return `<button class="annual-col" data-year="${y.year}" title="ปี ${y.year} · ${fmtTHB(y.sales)} · ${y.billCount} บิล" onclick="openSalesYear(this.dataset.year)"><div class="annual-bars">${targetLine}<span class="annual-amount${amtCls}" style="${amtStyle||`bottom:calc(${amtBottom}% + 7px)`}">${fmtChartTHB(y.sales)}</span><div class="annual-bar" style="height:${barPct}%${barColor?`;background:${barColor}`:''}"></div></div><div class="annual-label"><b>${y.year}${isYtd?' · YTD':''}</b>${targetBadge}<span class="al-bill">${y.billCount} บิล · เฉลี่ย ${fmtChartTHB(avg)}</span></div></button>`;
   }).join('');
   // ยอดสะสมรวมทุกปี
   const totSales=allYears.reduce((s,y)=>s+(+y.sales||0),0);
