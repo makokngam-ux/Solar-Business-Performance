@@ -35,7 +35,8 @@ var HEADERS = ['id','name','projName','customer','contact','type','stage','kwp',
                'value','prob','product','close','followUp','next','notes','locked','review',
                'piRef','piFull','piStatus','piDate','piRev','piUpdated',
                'custTel','custEmail','custTaxId','custAddress','custType','custSale',
-               'lineItems','created','updated','activities'];
+               'lineItems','created','updated','activities',
+               'delivery'];   // delivery = ข้อความยอดค้างรับ (Comment 1 ของใบส่งสินค้า) ของดีล PO IN
 
 // คอลัมน์ที่เก็บเป็น JSON (array) ต้อง parse/stringify เวลาอ่าน-เขียน
 function isJsonCol_(key){ return key === 'activities' || key === 'lineItems'; }

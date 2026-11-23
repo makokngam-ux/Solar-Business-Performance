@@ -1054,6 +1054,15 @@ body{min-height:100dvh;background-repeat:no-repeat;background-color:#f5f7fa}
 /* โลโก้หัวแอป = ไอคอนแอปชุดเดียวกับหน้าจอมือถือ (เปลี่ยน 20 พ.ย. 2026) */
 .logo{background:#164e63;overflow:hidden;padding:0;border-color:rgba(255,255,255,.55)}
 .logo svg.logo-art{width:100%!important;height:100%!important;filter:none;display:block}
+
+/* ===== เกณฑ์สถานะ + ค้างรับ (23 พ.ย. 2026) ===== */
+.kcol-desc{font-size:12px;color:var(--ink3);margin:-3px 4px 7px;line-height:1.35}
+.stage-menu button .sm-tx{display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0;text-align:left;flex:1}
+.stage-menu button .sm-tx small{font-size:12px;font-weight:500;color:var(--ink3);white-space:normal;line-height:1.3}
+.stage-menu{min-width:250px}.stage-menu button{height:auto!important;min-height:44px;padding-top:6px!important;padding-bottom:6px!important}
+.dv-delivery{width:100%;margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:500 12.5px/1.5 'Prompt',sans-serif;color:var(--ink);background:#fff;resize:vertical}
+.fu-sub.dl{flex-wrap:wrap;row-gap:4px}.fu-sub.dl>span{white-space:normal;overflow:visible;text-overflow:clip;max-width:none;flex:none}
+.dl-bar{display:inline-block;width:64px;height:6px;border-radius:99px;background:var(--line2);overflow:hidden;vertical-align:middle}.dl-bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
 </style>
 </head>
 <body>
@@ -1301,14 +1310,16 @@ body{min-height:100dvh;background-repeat:no-repeat;background-color:#f5f7fa}
 // สถานะตามไฟล์ PI (รวม PO IN เข้า PO WIN)
 // สีไล่ตาม "โอกาส" (เทา→เหลือง→ไลม์→เขียว→มรกต→เขียวเข้ม · หลุด=แดง) ใช้ชุดเดียวกันทั้งป้าย/ชิป/Kanban/แถบ
 const STAGES = [
-  {id:'newpi',  name:'NEW PI',  en:'New PI',   color:'#64748b', prob:50},
-  {id:'p30',    name:'30%',     en:'30%',      color:'#eab308', prob:30},
-  {id:'p50',    name:'50%',     en:'50%',      color:'#84cc16', prob:50},
-  {id:'p90',    name:'90%',     en:'90%',      color:'#22c55e', prob:90},
-  {id:'poin',   name:'PO IN',   en:'PO In',    color:'#0d9488', prob:100},
-  {id:'won',    name:'PO WIN',  en:'PO Win',   color:'#16a34a', prob:100},
-  {id:'lost',   name:'LOST',    en:'Lost',     color:'#dc2626', prob:0},
+  // เกณฑ์สถานะที่ใช้จริง (กำหนด 23 พ.ย. 2026) — desc แสดงใต้หัวคอลัมน์ Kanban / ในเมนูเปลี่ยนสถานะ / ในฟอร์ม
+  {id:'newpi',  name:'NEW PI',  en:'New PI',   color:'#64748b', prob:30,  desc:'ใบเสนอราคาใหม่ ยังไม่จัดสถานะ'},
+  {id:'p30',    name:'30%',     en:'30%',      color:'#eab308', prob:30,  desc:'ลูกค้าขอราคา'},
+  {id:'p50',    name:'50%',     en:'50%',      color:'#84cc16', prob:50,  desc:'งานประมูล'},
+  {id:'p90',    name:'90%',     en:'90%',      color:'#22c55e', prob:90,  desc:'คุยราคาจบแล้ว'},
+  {id:'poin',   name:'PO IN',   en:'PO In',    color:'#0d9488', prob:100, desc:'ได้มัดจำ/PO แล้ว (รวมงานทยอยรับ)'},
+  {id:'won',    name:'PO WIN',  en:'PO Win',   color:'#16a34a', prob:100, desc:'เปิดใบกำกับภาษีครบแล้ว'},
+  {id:'lost',   name:'LOST',    en:'Lost',     color:'#dc2626', prob:0,   desc:'ไม่ได้งาน'},
 ];
+const UNCLASSIFIED_DAYS = 7;   // NEW PI ค้างเกินกี่วันถือว่า "ยังไม่จัดสถานะ" ต้องเตือน
 // หมวดสินค้า (แบรนด์หลัก) — ใช้แทน "ประเภทงาน" เดิม
 const TYPES = ['SolarEdge','KSTAR','SMA','Jinko','JA Solar','Talesun','Solar PPM','Longi','Leapton','Schutten','HUIDA','Ekarat','Sunwoda','อื่นๆ'];
 // เป้ายอดขายรายปี (พ.ศ. → บาท) — แก้/เพิ่มได้ที่นี่
@@ -1427,6 +1438,7 @@ const ICONS = {
   'info':'<circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><path d="M12 7h.01"/>',
   'wallet':'<path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v12H6a2 2 0 0 1-2-2Z"/><path d="M20 11h-5a3 3 0 0 0 0 6h5"/><path d="M15 14h.01"/>',
   'trending-up':'<path d="m3 17 6-6 4 4 7-8"/><path d="M14 7h6v6"/>',
+  'truck':'<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>',
   'solar-performance':'<circle cx="7" cy="7" r="2.8"/><path d="M7 1.5v1.2M7 11.3v1.2M1.5 7h1.2M11.3 7h1.2M3.1 3.1l.9.9M10 10l.9.9M10.9 3.1l-.9.9M4 10l-.9.9"/><path d="m3 20 5-5 3.5 3 7-8"/><path d="M14.5 10H19v4.5"/>',
   'badge-check':'<path d="M12 3 15 5l3.5.2.8 3.4L22 11l-1.6 3 1 3.5-3.4 1.2-2 2.8-4-1-4 1-2-2.8-3.4-1.2 1-3.5L2 11l2.7-2.4.8-3.4L9 5Z"/><path d="m8.5 12.5 2.3 2.3 4.7-5.1"/>',
   'shield-check':'<path d="M12 3 20 6.5v5.8c0 4.9-3.4 8.2-8 9.7-4.6-1.5-8-4.8-8-9.7V6.5Z"/><path d="m8.5 12.2 2.3 2.3 4.8-5"/>',
@@ -1491,6 +1503,60 @@ const FOLLOWUP_DAYS = 7;     // ใบเสนอราคาออกมาก
 const FOLLOWUP_MAX = 12;     // โฟกัสสูงสุดต่อวัน (ดีลที่ระบุ "โทร" ไว้เองปักหมุดเสมอ)
 const followFlag = p => /(โทร|call|follow.?up|ติดตาม|นัด)/i.test(p.next||'');
 const weightedVal = p => (+p.value||0)*(+p.prob||0)/100;
+// ดีล NEW PI ที่ยังค้างค่าเดิม 50% → ปรับเป็น 30% ตามเกณฑ์ใหม่ (ทำซ้ำได้ ไม่กระทบสถานะอื่น)
+function normalizeNewPiProb(){ let ch=false; DATA.forEach(p=>{ if(p.stage==='newpi'&&+p.prob===50){ p.prob='30'; ch=true; } }); return ch; }
+// NEW PI ที่ออกมาเกิน UNCLASSIFIED_DAYS วันแล้วยังไม่ถูกจัดเป็น 30/50/90
+function unclassifiedDays(p){ if(p.stage!=='newpi') return null; const a=dataAgeDays(p.piDate||''); return (a!=null&&a>UNCLASSIFIED_DAYS)?a:null; }
+/* ---------- ค้างรับ / รอส่ง (PO IN ที่ทยอยรับ) ----------
+   p.delivery = ข้อความ Comment 1 ของใบส่งสินค้า วางได้หลายบรรทัด (รอบละบรรทัด) เช่น
+   "20260815-001 รับรอบที่ 3 รับจำนวน 1,200/4800 แผง คงเหลือ ค้างรับ 868 แผง"  หรือแบบย่อ "ค้างรับ 868/4800 แผง" */
+function parseDelivery(text){
+  const num=v=>parseInt(String(v||'').replace(/[^\d]/g,''),10);
+  let best=null;
+  String(text||'').split(/\r?\n/).map(l=>l.trim()).filter(Boolean).forEach((line,idx)=>{
+    let r=null;
+    const m=line.match(/(?:(\d{8})\s*-\s*\d+)?\s*รับรอบที่\s*(\d+)[^\d]*รับ(?:จำนวน)?\s*([\d,]+)\s*\/\s*([\d,]+)\s*([^\s\d,.\/]+)?[^\d]*ค้างรับ\s*([\d,]+)/);
+    if(m) r={date:m[1]?`${m[1].slice(0,4)}-${m[1].slice(4,6)}-${m[1].slice(6,8)}`:'', round:+m[2], received:num(m[3]), total:num(m[4]), unit:m[5]||'', remaining:num(m[6])};
+    else{
+      const s2=line.match(/ค้างรับ\s*([\d,]+)\s*(?:\/\s*([\d,]+))?\s*([^\s\d,.\/]+)?/);
+      if(s2){ const d=line.match(/(\d{8})\s*-\s*\d+/); r={date:d?`${d[1].slice(0,4)}-${d[1].slice(4,6)}-${d[1].slice(6,8)}`:'', round:0, received:null, total:s2[2]?num(s2[2]):null, unit:s2[3]||'', remaining:num(s2[1])}; }
+    }
+    if(r&&Number.isFinite(r.remaining)){ r.line=line; r.idx=idx; if(!best||r.round>best.round||(r.round===best.round&&idx>best.idx)) best=r; }
+  });
+  if(best&&best.unit==='คงเหลือ') best.unit='';
+  return best;   // null = ยังไม่มีข้อมูลที่อ่านได้
+}
+// PO IN ที่ยังส่งไม่ครบ (หรือยังไม่ได้ใส่ยอดค้างรับ) — ค้างรับมากสุด/เก่าสุดขึ้นก่อน · ที่ส่งครบแล้ว (ค้างรับ 0) ไม่แสดง
+function pendingDeliveries(){
+  return DATA.filter(p=>p.stage==='poin').map(p=>({p,d:parseDelivery(p.delivery)})).filter(x=>!x.d||x.d.remaining>0)
+    .sort((a,b)=>(a.d?0:1)-(b.d?0:1) || ((a.d&&a.d.date)||'9').localeCompare((b.d&&b.d.date)||'9') || (+b.p.value||0)-(+a.p.value||0));
+}
+function setDelivery(id){
+  const p=DATA.find(x=>x.id===id), el=$('dvDelivery'); if(!p||!el) return;
+  const txt=el.value.trim(), d=parseDelivery(txt);
+  if(txt&&!d){ toast('อ่านยอดค้างรับไม่ได้ — ต้องมีคำว่า "ค้างรับ" ตามด้วยจำนวน เช่น ค้างรับ 868/4800 แผง','err'); return; }
+  p.delivery=txt; p.updated=Date.now();
+  addActivity(p, !txt?'ล้างข้อมูลค้างรับ':(d.remaining>0?`ค้างรับ ${d.remaining.toLocaleString()}${d.total?'/'+d.total.toLocaleString():''} ${d.unit||''}`.trim():'ส่งสินค้าครบแล้ว'),'update');
+  commit(); render(); openDetail(id); toast(!txt?'ล้างข้อมูลค้างรับแล้ว':d.remaining>0?`บันทึกแล้ว · ค้างรับ ${d.remaining.toLocaleString()} ${d.unit||''}`.trim():'บันทึกแล้ว · ส่งครบแล้ว','ok');
+}
+function deliveryPanel(){
+  const list=pendingDeliveries(); if(!list.length) return '';
+  const rows=list.slice(0,12).map(({p,d})=>{
+    let tag, sub;
+    if(d){
+      const pct=d.total?Math.max(0,Math.min(100,Math.round((d.total-d.remaining)/d.total*100))):null;
+      tag=`<span class="fu-tag od">ค้างรับ ${d.remaining.toLocaleString()}${d.total?'/'+d.total.toLocaleString():''} ${esc(d.unit||'')}</span>`;
+      sub=`${pct!=null?`<span class="dl-bar"><i style="width:${pct}%"></i></span><span>ส่งแล้ว ${pct}%</span>`:''}${d.round?`<span>รอบที่ ${d.round}</span>`:''}${d.date?`<span>รับล่าสุด ${fmtSalesDate(d.date)}</span>`:''}`;
+    } else {
+      tag=`<span class="fu-tag today">ยังไม่ได้ใส่ยอดค้างรับ</span>`;
+      sub=`<span>เปิดดีลแล้ววาง Comment 1 ของใบส่งสินค้า</span>`;
+    }
+    const tel=p.custTel?`<a class="fu-btn call" href="tel:${esc(p.custTel)}" onclick="event.stopPropagation()" title="โทร ${esc(p.custTel)}"><i data-lucide="phone"></i></a>`:'';
+    return `<div class="fu-row"><div class="fu-main" onclick="openDetail('${p.id}')"><div class="fu-name">${esc(displayName(p))} ${tag}</div><div class="fu-sub dl">${badge(p.stage)}<span>${esc(p.piFull||p.piRef||'')}</span>${sub}</div></div><div class="fu-act">${tel}</div></div>`;
+  }).join('');
+  const withQty=list.filter(x=>x.d).length;
+  return `<div class="panel fu-panel"><h3><i data-lucide="truck"></i>รอส่ง / ค้างรับ <span class="fu-count">${list.length}</span> <span class="panel-note">PO IN ที่ยังส่งไม่ครบ${list.length-withQty?` · ยังไม่ได้ใส่ยอด ${list.length-withQty} ดีล`:''}</span></h3><div class="fu-list">${rows}</div>${list.length>12?`<div class="fu-empty">แสดง 12 จาก ${list.length} ดีล — กดการ์ด "รอส่ง/ค้างรับ" ด้านบนเพื่อดูทั้งหมด</div>`:''}</div>`;
+}
 /* ===================== FOLLOW-UP (ระบบติดตาม) ===================== */
 const todayISO = () => { const d=new Date(); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
 const addDaysISO = (iso,n) => { const d=iso?new Date(iso+'T00:00:00'):new Date(); d.setDate(d.getDate()+n); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };
@@ -1578,7 +1644,7 @@ function icons(){
 }
 
 /* ===================== STORAGE ===================== */
-function load(){ try{DATA=uniqIds((JSON.parse(localStorage.getItem(LS))||[]).map(p=>({...p,id:safeId(p.id),activities:normalizeActivities(p.activities)})))}catch(e){DATA=[]} purgeSamples(); migrateTypes(); migrateStages(); migratePiDates(); migrateDateFormats(); migrateGoalTarget(); hydratePiItems(); recomputeKwp(); }
+function load(){ try{DATA=uniqIds((JSON.parse(localStorage.getItem(LS))||[]).map(p=>({...p,id:safeId(p.id),activities:normalizeActivities(p.activities)})))}catch(e){DATA=[]} purgeSamples(); migrateTypes(); migrateStages(); migratePiDates(); migrateDateFormats(); migrateGoalTarget(); hydratePiItems(); recomputeKwp(); if(normalizeNewPiProb()) persist(); }
 function hydratePiItems(){
   const byRef=PI_ITEMS.byRef||{}; let changed=false;
   DATA.forEach(p=>{
@@ -1657,7 +1723,7 @@ function init(){
   loadQuickNotes();
   // populate selects
   const fStage=$('fStage'), fType=$('fType'), formStage=$('f_stage'), formType=$('f_type');
-  STAGES.forEach(s=>{ fStage.add(new Option(s.name,s.id)); formStage.add(new Option(s.name,s.id)); });
+  STAGES.forEach(s=>{ fStage.add(new Option(s.name,s.id)); formStage.add(new Option(s.desc?`${s.name} — ${s.desc}`:s.name,s.id)); });
   TYPES.forEach(t=>{ fType.add(new Option(t,t)); formType.add(new Option(t,t)); });
   $('f_syncurl').value = syncUrl;
   $('f_target').value = fmtComma(salesTarget);
@@ -1741,6 +1807,7 @@ function filtered(ignoreStage){
   const q=($('q').value||'').toLowerCase().trim();
   const fs=$('fStage').value, ft=$('fType').value;
   const followIds = quickMode==='call' ? new Set(followUpList().map(p=>p.id)) : null;
+  const deliveryIds = quickMode==='delivery' ? new Set(pendingDeliveries().map(x=>x.p.id)) : null;
   return DATA.filter(p=>{
     if(reviewFilter && !ignoreStage && !p.review) return false;   // ปุ่มกรอง "ตรวจสอบ" — เฉพาะดีลที่ติดธง ⚠
     if(fs && !ignoreStage && p.stage!==fs) return false;
@@ -1770,6 +1837,8 @@ function filtered(ignoreStage){
       if(!isOpenStage(p) || (+p.value||0)<cut || !(+p.value||0)) return false;
     }
     if(quickMode==='hot' && (!isOpenStage(p) || (+p.prob||0)<70)) return false;
+    if(quickMode==='unclassified' && unclassifiedDays(p)==null) return false;
+    if(quickMode==='delivery' && !(deliveryIds&&deliveryIds.has(p.id))) return false;
     return true;
   });
 }
@@ -1957,7 +2026,7 @@ function renderStatusBar(){
   const cur=$('fStage').value;
   const chips=STAGES.map(s=>{
     const n=base.filter(p=>p.stage===s.id).length;
-    return `<button class="st-chip${cur===s.id?' active':''}" style="${cur===s.id?`background:${s.color};border-color:${s.color};color:${onColor(s.color)}`:''}" onclick="setStageFilter('${s.id}')"><span class="sd" style="background:${cur===s.id?onColor(s.color):s.color}"></span>${s.name}<b style="${cur===s.id?`color:${onColor(s.color)}`:''}">${n}</b></button>`;
+    return `<button class="st-chip${cur===s.id?' active':''}" style="${cur===s.id?`background:${s.color};border-color:${s.color};color:${onColor(s.color)}`:''}" onclick="setStageFilter('${s.id}')" title="${esc(s.name+' = '+(s.desc||''))}"><span class="sd" style="background:${cur===s.id?onColor(s.color):s.color}"></span>${s.name}<b style="${cur===s.id?`color:${onColor(s.color)}`:''}">${n}</b></button>`;
   }).join('');
   const rvN=base.filter(p=>p.review).length;
   const reviewChip=(rvN>0||reviewFilter)?`<button class="st-chip review${reviewFilter?' active':''}" onclick="toggleReviewFilter()" title="ดีลที่ค่าที่ตั้งเอง (ชื่อ/kWp/ผู้ติดต่อ) ไม่ตรงกับ PI ใหม่ — รอตรวจสอบ"><i data-lucide="alert-triangle"></i>ตรวจสอบ<b>${rvN}</b></button>`:'';
@@ -2028,7 +2097,11 @@ function renderQuickActions(){
   const vals=open.map(p=>+p.value||0).sort((a,b)=>b-a);
   const cut=vals[Math.min(2,vals.length-1)] || 0;
   const high=open.filter(p=>(+p.value||0)>=cut && (+p.value||0)>0);
+  const unclassified=DATA.filter(p=>unclassifiedDays(p)!=null);
+  const pendDel=pendingDeliveries().map(x=>x.p);
   const cards=[
+    {id:'unclassified',icon:'alert-circle',name:'ยังไม่จัดสถานะ',count:unclassified.length,meta:`NEW PI เกิน ${UNCLASSIFIED_DAYS} วัน · ${fmtTHB(sum(unclassified))}`},
+    {id:'delivery',icon:'truck',name:'รอส่ง/ค้างรับ',count:pendDel.length,meta:`PO IN ยังส่งไม่ครบ · ${fmtTHB(sum(pendDel))}`},
     {id:'today',icon:'target',name:'ปิดวันนี้',count:today.length,meta:fmtTHB(sum(today))},
     {id:'overdue',icon:'alert-circle',name:'เลยกำหนด',count:overdue.length,meta:fmtTHB(sum(overdue))},
     {id:'soon',icon:'alert-circle',name:'ใกล้ปิด 7 วัน',count:soon.length,meta:fmtTHB(sum(soon))},
@@ -2245,7 +2318,7 @@ function todayWorkCenter(){
   const stale=open.filter(p=>!(p.next||'').trim());
   const high=open.slice().sort((a,b)=>(+b.value||0)-(+a.value||0)).slice(0,3);
   const card=(mode,cls,label,list,note,tip)=>`<button class="today-action ${cls}" onclick="openTodayWork('${mode}')"${tip?` title="${esc(tip)}"`:''}><span>${label}</span><b>${list.length}</b><small>${note||fmtTHB(sum(list))}</small></button>`;
-  return `<div class="panel today-center"><h3><i data-lucide="target"></i>ศูนย์งานวันนี้ <span class="panel-note">คลิกเพื่อเปิดรายการที่เกี่ยวข้อง</span></h3><div class="today-grid">${card('call','call','โทร/ติดตาม',calls,null,`ดีลที่ตั้งวันติดตามไว้และถึงกำหนด + ดีลอุ่นที่เงียบนาน (โฟกัสสูงสุด ${FOLLOWUP_MAX} ดีล/วัน)`)}${card('overdue','overdue','เลยกำหนด',overdue)}${card('stale','','ไม่มี Next Action',stale,'ยังขาดขั้นตอนถัดไป')}${card('high','high','ดีลมูลค่าสูง',high,fmtTHB(sum(high)))}</div></div>`;
+  return `<div class="panel today-center"><h3><i data-lucide="target"></i>ศูนย์งานวันนี้ <span class="panel-note">คลิกเพื่อเปิดรายการที่เกี่ยวข้อง</span></h3><div class="today-grid">${card('call','call','โทร/ติดตาม',calls,null,`ดีลที่ตั้งวันติดตามไว้และถึงกำหนด + ดีลอุ่นที่เงียบนาน (โฟกัสสูงสุด ${FOLLOWUP_MAX} ดีล/วัน)`)}${card('overdue','overdue','เลยกำหนด',overdue)}${card('unclassified','overdue','ยังไม่จัดสถานะ',DATA.filter(p=>unclassifiedDays(p)!=null),null,`NEW PI ที่ออกมาเกิน ${UNCLASSIFIED_DAYS} วัน ยังไม่ได้จัดเป็น 30% / 50% / 90%`)}${card('stale','','ไม่มี Next Action',stale,'ยังขาดขั้นตอนถัดไป')}${card('high','high','ดีลมูลค่าสูง',high,fmtTHB(sum(high)))}</div></div>`;
 }
 function followUpPanel(){
   const due=dueFollowUps(), up=upcomingFollowUps();
@@ -2355,6 +2428,7 @@ function renderDash(){
 
   h+=freshnessPanel();
   h+=followUpPanel();
+  h+=deliveryPanel();
   h+=todayWorkCenter();
   h+=salesGrowthAdvisor(open);
 
@@ -2621,7 +2695,9 @@ function srcBadge(p){
     : `<span class="src man"><i data-lucide="pencil"></i>เพิ่มเอง</span>`;
   const lock = p.locked ? `<span class="src lock"><i data-lucide="lock"></i>ล็อก</span>` : '';
   const review = p.review ? `<span class="src review"><i data-lucide="alert-triangle"></i>ตรวจสอบ</span>` : '';
-  return src+lock+review;
+  const ud = unclassifiedDays(p);
+  const uncl = ud!=null ? `<span class="src review" title="NEW PI ออกมา ${ud} วันแล้ว ยังไม่ได้จัดเป็น 30% / 50% / 90%"><i data-lucide="alert-circle"></i>ยังไม่จัดสถานะ ${ud} วัน</span>` : '';
+  return src+lock+review+uncl;
 }
 function catChip(t){ if(!t) return '—'; const c=prodColor(t); return `<span class="ptag" style="background:${c}1a;color:${c}"><span class="pd-dot" style="background:${c}"></span>${esc(t)}</span>`; }
 // แถบ "โอกาส" ใช้สีจาก STAGES (แหล่งเดียว) · PO WIN เต็มแถบเขียว · LOST เต็มแถบแดง
@@ -2704,11 +2780,11 @@ function openStageMenu(e,id){
   e.stopPropagation(); closeStageMenu();
   const p=DATA.find(x=>x.id===id); if(!p) return;
   const menu=document.createElement('div'); menu.className='stage-menu';
-  menu.innerHTML=STAGES.map(s=>`<button class="${s.id===p.stage?'cur':''}" onclick="pickStage(event,'${id}','${s.id}')"><span class="sd" style="background:${s.color}"></span>${s.name}${s.id===p.stage?'<i data-lucide="check"></i>':''}</button>`).join('');
+  menu.innerHTML=STAGES.map(s=>`<button class="${s.id===p.stage?'cur':''}" onclick="pickStage(event,'${id}','${s.id}')"><span class="sd" style="background:${s.color}"></span><span class="sm-tx">${s.name}${s.desc?`<small>${esc(s.desc)}</small>`:''}</span>${s.id===p.stage?'<i data-lucide="check"></i>':''}</button>`).join('');
   document.body.appendChild(menu);
-  const r=e.currentTarget.getBoundingClientRect(), mh=STAGES.length*38+12;
+  const r=e.currentTarget.getBoundingClientRect(), mh=STAGES.length*50+12;
   const top = (r.bottom+mh>window.innerHeight) ? (r.top+window.scrollY-mh-4) : (r.bottom+window.scrollY+4);
-  menu.style.top=top+'px'; menu.style.left=Math.min(r.left+window.scrollX, window.innerWidth-190)+'px';
+  menu.style.top=top+'px'; menu.style.left=Math.max(8,Math.min(r.left+window.scrollX, window.innerWidth-262))+'px';
   icons();
   setTimeout(()=>document.addEventListener('click',closeStageMenu,{once:true}),0);
 }
@@ -2797,7 +2873,7 @@ function renderKanban(){
       </div>`;
     }).join('');
     return `<div class="kcol" data-stage="${s.id}" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event,'${s.id}')">
-      <div class="kcol-hd"><div class="t"><span class="sd" style="background:${s.color}"></span>${s.name}</div><div class="c">${items.length}</div></div>
+      <div class="kcol-hd"><div class="t"><span class="sd" style="background:${s.color}"></span>${s.name}</div><div class="c">${items.length}</div></div>${s.desc?`<div class="kcol-desc">${esc(s.desc)}</div>`:''}
       <div class="kcol-sub"><span>${fmtTHB(val)}</span><b>${fmtTHB(weighted)}</b></div>
       <div class="kcol-meter"><i style="width:${meter}%;background:${s.color}"></i></div>
       ${cards||'<div style="text-align:center;color:#aab4bf;font-size:12px;padding:14px 0">— ว่าง —</div>'}
@@ -2844,6 +2920,17 @@ function openDetail(id){
   const factsHtml=facts.map(([k,v])=>`<div class="dv-fact"><span>${k}</span><b>${esc(v)}</b></div>`).join('');
   // ติดตาม: ปุ่มตั้งเร็ว
   const fuQuick=`<div class="dv-sec"><div class="dv-lab">ติดตาม · Follow-up</div><div class="dv-fu"><b class="dv-fu-date${p.followUp&&daysUntil(p.followUp)<0?' od':''}">${esc(fuTxt)}</b><div class="dv-fu-btns"><button onclick="setFollowUp('${p.id}','${addDaysISO(todayISO(),1)}')">พรุ่งนี้</button><button onclick="snoozeFollowUp('${p.id}',3)">+3 วัน</button><button onclick="snoozeFollowUp('${p.id}',7)">+1 สัปดาห์</button>${p.followUp?`<button class="clr" onclick="doneFollowUp('${p.id}')">เสร็จ ✓</button>`:''}</div></div></div>`;
+  // ค้างรับ / รอส่ง — เฉพาะ PO IN (งานทยอยรับ) หรือดีลที่เคยใส่ข้อมูลไว้
+  let deliveryHtml='';
+  if(p.stage==='poin'||(p.delivery||'').trim()){
+    const d=parseDelivery(p.delivery);
+    const sumTx = !d ? 'ยังไม่ได้ใส่ยอดค้างรับ'
+      : d.remaining>0 ? `ค้างรับ ${d.remaining.toLocaleString()}${d.total?' / '+d.total.toLocaleString():''} ${d.unit||''}${d.round?' · รับแล้ว '+d.round+' รอบ':''}${d.date?' · ล่าสุด '+fmtSalesDate(d.date):''}`
+      : 'ส่งครบแล้ว — รอเปิดใบกำกับภาษีครบเพื่อเป็น PO WIN';
+    deliveryHtml=`<div class="dv-sec"><div class="dv-lab">ค้างรับ / รอส่ง</div><div class="dv-fu"><b class="dv-fu-date${d&&d.remaining>0?' od':''}">${esc(sumTx.trim())}</b></div>
+      <textarea id="dvDelivery" class="dv-delivery" rows="3" placeholder="วาง Comment 1 ของใบส่งสินค้า (รอบละบรรทัด) เช่น&#10;20260815-001 รับรอบที่ 3 รับจำนวน 1,200/4800 แผง คงเหลือ ค้างรับ 868 แผง">${esc(p.delivery||'')}</textarea>
+      <div class="dv-fu-btns" style="margin-top:6px"><button onclick="setDelivery('${p.id}')">บันทึกยอดค้างรับ</button></div></div>`;
+  }
   // customer
   const cust=[p.contact?['user',p.contact]:null,p.custTel?['phone',p.custTel]:null,p.custEmail?['mail',p.custEmail]:null,p.custTaxId?['hash',p.custTaxId]:null,p.custAddress?['map-pin',p.custAddress]:null].filter(Boolean);
   const custHtml=cust.length?cust.map(([ic,t])=>`<div class="dv-ci"><i data-lucide="${ic}"></i><span>${esc(t)}</span></div>`).join(''):'<span style="color:var(--ink3);font-size:12.5px">ไม่มีข้อมูลติดต่อ</span>';
@@ -2872,6 +2959,7 @@ function openDetail(id){
     <div class="dv-sec"><div class="dv-lab">ลูกค้า</div><div class="dv-cust-name">${esc(p.customer||'—')}</div><div class="dv-cust">${custHtml}</div></div>
     <div class="dv-facts">${factsHtml}</div>
     ${fuQuick}
+    ${deliveryHtml}
     ${liHtml}
     <div class="dv-sec"><div class="dv-lab">สินค้า</div><div style="display:flex;flex-wrap:wrap;gap:6px">${prodHtml}</div></div>
     ${(p.next||'').trim()?`<div class="dv-sec"><div class="dv-lab">ขั้นตอนถัดไป</div><div class="dv-text">${esc(p.next)}</div></div>`:''}
@@ -2990,7 +3078,7 @@ function openForm(id){
     ? {n:p.customer,t:p.custTel,e:p.custEmail,x:p.custTaxId,a:p.custAddress,p:p.custType,s:p.custSale} : null;
   acClose(); renderCustInfo(); applyScopeUI(); renderActivity(p);
   $('formOv').classList.add('show'); icons();
-  if(!p){ $('f_stage').onchange=()=>{ $('f_prob').value=stageById($('f_stage').value).prob; }; }
+  $('f_stage').onchange=()=>{ $('f_prob').value=stageById($('f_stage').value).prob; };   // เปลี่ยนสถานะแล้ว % ตามเกณฑ์ทันที ทั้งดีลใหม่และดีลเดิม (แก้ % เองต่อได้)
 }
 function closeForm(){ acClose(); $('formOv').classList.remove('show'); }
 
@@ -3234,8 +3322,9 @@ function mapStatus(st){
   if(st==='LOST'||st==='CANCEL') return {stage:'lost',prob:0};
   const m=st.match(/(\d+)\s*%/);
   if(m){ const p=+m[1]; return {stage:p>=90?'p90':(p>=50?'p50':'p30'),prob:p}; }
-  if(st==='NEW PI'||st.includes('PI')) return {stage:'newpi',prob:50};
-  return {stage:'newpi',prob:50};
+  // NEW PI = ยังไม่จัดสถานะ ถ่วงน้ำหนัก 30% (เดิม 50% เท่างานประมูล ทำให้ Pipeline ถ่วงน้ำหนักสูงเกินจริง)
+  if(st==='NEW PI'||st.includes('PI')) return {stage:'newpi',prob:30};
+  return {stage:'newpi',prob:30};
 }
 function brandOf(code){
   // จับจากคำในรหัส/รายละเอียด (รองรับทั้งโค้ดสั้นและข้อความที่ติดมา)
@@ -4339,17 +4428,19 @@ async function pullNow(silent){
     if(arr){
       // สร้าง products[] กลับจากสตริง และรักษา activity ในเครื่องเมื่อ backend รุ่นเดิมยังไม่มีคอลัมน์นี้
       const localActs=new Map(DATA.map(p=>[p.id,normalizeActivities(p.activities)]));
-      const localReview=new Map(DATA.map(p=>[p.id,!!p.review]));   // เก็บธง ⚠ ในเครื่องไว้ เผื่อ Sheet ยังไม่มีคอลัมน์ review
+      const localReview=new Map(DATA.map(p=>[p.id,!!p.review]));
+      const localDelivery=new Map(DATA.map(p=>[p.id,p.delivery||'']));   // หลังบ้านรุ่นที่ยังไม่มีคอลัมน์ delivery → คงค่าที่อยู่ในเครื่องไว้   // เก็บธง ⚠ ในเครื่องไว้ เผื่อ Sheet ยังไม่มีคอลัมน์ review
       DATA=arr.map(p=>{
         const remoteActs=normalizeActivities(p.activities);
         return {...p, id:safeId(p.id),
           products:(p.products&&p.products.length)?p.products:(p.product?String(p.product).split(/\s*[+,]\s*/).filter(Boolean):[]),
           locked:(p.locked===true||p.locked==='true'||p.locked===1||p.stage==='won'),
           review:(p.review===true||p.review==='true'||p.review==='TRUE'||p.review===1) || (p.review===undefined && !!localReview.get(p.id)),
+          delivery:(p.delivery!==undefined?String(p.delivery||''):(localDelivery.get(p.id)||'')),
           activities:remoteActs.length?remoteActs:(localActs.get(p.id)||[])
         };
       });
-      migrateTypes(); migrateStages(); migrateDateFormats();   // แก้วันที่ที่ Sheet แปลงเป็น ISO datetime
+      migrateTypes(); migrateStages(); migrateDateFormats(); normalizeNewPiProb();   // แก้วันที่ที่ Sheet แปลงเป็น ISO datetime
       uniqIds(DATA);
       if(!persist()){ setBusy(false); render(); return; }   // เก็บลงเครื่องไม่สำเร็จ → ไม่ถือว่าซิงก์แล้ว
       if(!Array.isArray(j)&&j.rev!=null) localStorage.setItem('pl_rev',String(j.rev)); else localStorage.removeItem('pl_rev');
