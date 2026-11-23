@@ -1063,6 +1063,14 @@ body{min-height:100dvh;background-repeat:no-repeat;background-color:#f5f7fa}
 .dv-delivery{width:100%;margin-top:8px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;font:500 12.5px/1.5 'Prompt',sans-serif;color:var(--ink);background:#fff;resize:vertical}
 .fu-sub.dl{flex-wrap:wrap;row-gap:4px}.fu-sub.dl>span{white-space:normal;overflow:visible;text-overflow:clip;max-width:none;flex:none}
 .dl-bar{display:inline-block;width:64px;height:6px;border-radius:99px;background:var(--line2);overflow:hidden;vertical-align:middle}.dl-bar i{display:block;height:100%;background:var(--accent);border-radius:99px}
+
+/* ===== งานเดียวกันเสนอหลายลูกค้า (23 พ.ย. 2026) ===== */
+.src.job{background:#eef2ff;color:#3730a3}.src.job.dup{background:#eef2f6;color:#486581}
+.dv-job-list{display:grid;gap:6px;margin-top:8px}
+.dv-job-item{display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;text-align:left;border:1px solid var(--line2);background:#fff;border-radius:10px;padding:8px 10px;font:600 12.5px 'Prompt',sans-serif;color:var(--ink);cursor:pointer;min-height:44px}
+.dv-job-item small{font-size:12px;font-weight:500;color:var(--ink3);flex-basis:100%}
+.dv-job-set{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
+.dv-job-set input{flex:1;min-width:170px;min-height:36px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;font:500 12.5px 'Prompt',sans-serif;color:var(--ink);background:#fff}
 </style>
 </head>
 <body>
@@ -1305,6 +1313,7 @@ body{min-height:100dvh;background-repeat:no-repeat;background-color:#f5f7fa}
 <script src="customers.js" onerror="window.CUSTOMERS=window.CUSTOMERS||[]"></script>
 <script src="sales_history.js" onerror="window.SALES_HISTORY=window.SALES_HISTORY||{years:[]}"></script>
 <script src="pi_items.js" onerror="window.PI_ITEMS=window.PI_ITEMS||{byRef:{}}"></script>
+<script src="report_latest.js" onerror="window.PI_REPORT_FILE=null"></script>
 <script>
 /* ===================== CONFIG ===================== */
 // สถานะตามไฟล์ PI (รวม PO IN เข้า PO WIN)
@@ -1502,7 +1511,52 @@ const dateOnly = d => new Date(d.getFullYear(),d.getMonth(),d.getDate());
 const FOLLOWUP_DAYS = 7;     // ใบเสนอราคาออกมากี่วันถือว่าควรตามได้แล้ว
 const FOLLOWUP_MAX = 12;     // โฟกัสสูงสุดต่อวัน (ดีลที่ระบุ "โทร" ไว้เองปักหมุดเสมอ)
 const followFlag = p => /(โทร|call|follow.?up|ติดตาม|นัด)/i.test(p.next||'');
-const weightedVal = p => (+p.value||0)*(+p.prob||0)/100;
+/* ---------- งานเดียวกันที่เสนอหลายลูกค้า: นับใน Pipeline ครั้งเดียว ----------
+   จับกลุ่ม 2 แบบ: (1) อัตโนมัติ — ใบเสนอราคาที่ยังไม่ได้งาน (NEW PI/30/50/90) ต่างลูกค้า แต่รายการสินค้า+จำนวน+มูลค่าตรงกันทุกตัว
+                   (2) ตั้งเอง — ดีลที่ใส่ "รหัสงานร่วม" (jobKey) เดียวกัน (ใช้เมื่อราคาแต่ละรายไม่เท่ากัน)
+   ในกลุ่มนับเฉพาะดีลตัวแทน (โอกาสสูงสุด → PI ล่าสุด → มูลค่าสูงสุด) · ดีลที่ตั้ง jobSolo = นับแยกเสมอ
+   งานที่ได้ PO แล้วไม่ถูกจับกลุ่มอัตโนมัติ เพราะสินค้า/ราคาเดียวกันที่ขายได้จริงสองรายคือสองงาน */
+const QUOTE_STAGES=new Set(['newpi','p30','p50','p90']);
+let _jobCache=null;
+function jobAutoSig(p){
+  const items=(p.lineItems||[]).filter(it=>it&&it.code); if(!items.length||!(+p.value>0)) return '';
+  return 's:'+items.map(it=>String(it.code).trim().toUpperCase()+'x'+(+it.qty||0)).sort().join('|')+'@'+Math.round(+p.value);
+}
+function jobGroups(){
+  if(_jobCache) return _jobCache;
+  const by=new Map();
+  DATA.forEach(p=>{
+    if(p.jobSolo===true||p.stage==='lost') return;
+    const key=String(p.jobKey||'').trim(); let sig='';
+    if(key) sig='k:'+key.toLowerCase(); else if(QUOTE_STAGES.has(p.stage)) sig=jobAutoSig(p);
+    if(!sig) return; if(!by.has(sig)) by.set(sig,[]); by.get(sig).push(p);
+  });
+  const dup=new Map(), grp=new Map();
+  by.forEach((arr,sig)=>{
+    if(arr.length<2) return;
+    if(sig[0]==='s' && new Set(arr.map(p=>String(p.customer||'').replace(/\s+/g,'').toLowerCase())).size<2) return;   // ลูกค้ารายเดียว = ไม่ใช่กรณีเสนอหลายราย
+    const rep=arr.slice().sort((a,b)=>(+b.prob||0)-(+a.prob||0)||String(b.piDate||'').localeCompare(String(a.piDate||''))||(+b.value||0)-(+a.value||0))[0];
+    arr.forEach(p=>{ grp.set(p.id,{rep:rep.id,members:arr,auto:sig[0]==='s'}); if(p!==rep&&isOpenStage(p)) dup.set(p.id,rep.id); });
+  });
+  return _jobCache={dup,grp};
+}
+// มูลค่าที่ใช้รวมยอด Pipeline: ดีลที่ซ้ำกับงานเดียวกัน (ไม่ใช่ตัวแทน) นับเป็น 0 · ตัวเลขบนการ์ด/แถวของดีลเองยังแสดงมูลค่าจริง
+const pv = p => jobGroups().dup.has(p.id) ? 0 : (+p.value||0);
+function setJobKey(id){
+  const p=DATA.find(x=>x.id===id), el=$('dvJobKey'); if(!p||!el) return;
+  const k=el.value.trim(); if(k===(p.jobKey||'')) { toast('รหัสงานร่วมเหมือนเดิม'); return; }
+  p.jobKey=k; if(k) p.jobSolo=false; p.updated=Date.now();
+  addActivity(p,k?`ตั้งรหัสงานร่วม "${k}"`:'ล้างรหัสงานร่วม','update'); _jobCache=null; commit(); render(); openDetail(id);
+  const g=jobGroups().grp.get(id);
+  toast(k?(g?`รวมเป็นงานเดียวกัน ${g.members.length} ดีล · นับครั้งเดียว`:'บันทึกแล้ว · ยังไม่มีดีลอื่นใช้รหัสนี้'):'ล้างรหัสงานร่วมแล้ว','ok');
+}
+function toggleJobSolo(id){
+  const p=DATA.find(x=>x.id===id); if(!p) return;
+  p.jobSolo=!(p.jobSolo===true); p.updated=Date.now();
+  addActivity(p,p.jobSolo?'ตั้งให้นับแยก (ไม่รวมกับงานเดียวกัน)':'ยกเลิกการนับแยก','update'); _jobCache=null; commit(); render(); openDetail(id);
+  toast(p.jobSolo?'ดีลนี้นับแยกแล้ว':'กลับไปรวมกับงานเดียวกัน','ok');
+}
+const weightedVal = p => pv(p)*(+p.prob||0)/100;
 // ดีล NEW PI ที่ยังค้างค่าเดิม 50% → ปรับเป็น 30% ตามเกณฑ์ใหม่ (ทำซ้ำได้ ไม่กระทบสถานะอื่น)
 function normalizeNewPiProb(){ let ch=false; DATA.forEach(p=>{ if(p.stage==='newpi'&&+p.prob===50){ p.prob='30'; ch=true; } }); return ch; }
 // NEW PI ที่ออกมาเกิน UNCLASSIFIED_DAYS วันแล้วยังไม่ถูกจัดเป็น 30/50/90
@@ -1744,7 +1798,10 @@ function init(){
   let skipSyncOnce=false;
   try{ skipSyncOnce=sessionStorage.getItem('pl_skip_sync_once')==='1'; sessionStorage.removeItem('pl_skip_sync_once'); }catch(e){}
   // มีงานแก้ที่ยังไม่ได้ส่ง (เช่น แก้ตอนออฟไลน์) → ส่งขึ้นก่อน ไม่ดึง Sheet มาทับ
-  if(syncUrl&&!skipSyncOnce){ if(isDirty()){ render(); pushNow(false); if(localStorage.getItem('pl_dirty_app')) pushAppData(false); } else pullNow(true); } else { render(); }
+  let first=null;
+  if(syncUrl&&!skipSyncOnce){ if(isDirty()){ render(); first=pushNow(false); if(localStorage.getItem('pl_dirty_app')) pushAppData(false); } else first=pullNow(true); } else { render(); }
+  // ซิงก์รอบแรกจบแล้วค่อยนำเข้ารายงานล่าสุด (ถ้ามี) — จะได้อัปเดตทับข้อมูลชุดล่าสุดจาก Sheet แล้วส่งกลับขึ้นไป
+  Promise.resolve(first).catch(()=>{}).then(()=>{ try{ autoImportReport(); }catch(e){ console.error('auto import failed',e); } });
 }
 
 /* ===================== VIEW SWITCH ===================== */
@@ -1845,6 +1902,7 @@ function filtered(ignoreStage){
 
 /* ===================== RENDER ===================== */
 function render(){
+  _jobCache=null;   // จับกลุ่มงานเดียวกันใหม่ทุกครั้งที่วาดหน้า
   const v=window._view;
   const standaloneMode=v==='exec'||v==='sales'||v==='claims'||v==='ar';
   document.querySelector('.toolbar').style.display=standaloneMode?'none':'';
@@ -1879,9 +1937,9 @@ async function copyOneMinuteSummary(){
 function renderExecutive(){
   const box=$('view-exec'); if(!box) return;
   const open=DATA.filter(isOpenStage), won=DATA.filter(p=>p.stage==='won');
-  const pipeline=open.reduce((s,p)=>s+(+p.value||0),0);
-  const weighted=open.reduce((s,p)=>s+(+p.value||0)*(+p.prob||0)/100,0);
-  const wonVal=won.reduce((s,p)=>s+(+p.value||0),0);
+  const pipeline=open.reduce((s,p)=>s+pv(p),0);
+  const weighted=open.reduce((s,p)=>s+pv(p)*(+p.prob||0)/100,0);
+  const wonVal=won.reduce((s,p)=>s+pv(p),0);
   const targetPct=salesTarget?Math.round(wonVal/salesTarget*100):0;
   const years=SALES_HISTORY.years||[], curBE=new Date().getFullYear()+543;
   const salesY=years.find(y=>+y.year===curBE)||years.at(-1)||null;
@@ -2039,8 +2097,8 @@ function renderFilterBar(){
   const bar=$('filterBar'); if(!bar) return;
   if(window._view==='dash'){ bar.style.display='none'; return; }
   const list=filtered();
-  const total=list.reduce((s,p)=>s+(+p.value||0),0);
-  const weighted=list.reduce((s,p)=>s+(+p.value||0)*(+p.prob||0)/100,0);
+  const total=list.reduce((s,p)=>s+pv(p),0);
+  const weighted=list.reduce((s,p)=>s+pv(p)*(+p.prob||0)/100,0);
   const totKwp=list.reduce((s,p)=>s+(+p.kwp||0),0);
   // ป้ายบอกตัวกรองที่ใช้อยู่
   const tags=[]; const q=($('q').value||'').trim();
@@ -2086,7 +2144,7 @@ function setQuickMode(mode){
 
 function renderQuickActions(){
   const open=DATA.filter(isOpenStage);
-  const sum=arr=>arr.reduce((s,p)=>s+(+p.value||0),0);
+  const sum=arr=>arr.reduce((s,p)=>s+pv(p),0);
   const soon=open.filter(p=>{const d=daysUntil(p.close);return d!=null&&d>=0&&d<=7;});
   const today=open.filter(p=>daysUntil(p.close)===0);
   const overdue=open.filter(p=>{const d=daysUntil(p.close);return d!=null&&d<0;});
@@ -2305,14 +2363,15 @@ function executiveSalesOverview(){
 
 function dataAgeDays(iso){if(!iso)return null;const d=new Date(String(iso).slice(0,10)+'T00:00:00');return Number.isNaN(d.getTime())?null:Math.max(0,Math.floor((dateOnly(new Date())-dateOnly(d))/86400000));}
 function freshnessPanel(){
-  const salesDate=SALES_HISTORY.latestDate||'',piDate=PI_ITEMS.latestPiDate||'';
+  const rm=reportMeta();
+  const salesDate=SALES_HISTORY.latestDate||'',piDate=(rm&&rm.date)||PI_ITEMS.latestPiDate||'';
   const salesAge=dataAgeDays(salesDate),piAge=dataAgeDays(piDate);
   const card=(icon,title,date,age,source)=>`<div class="fresh-card"><div class="fresh-ic"><i data-lucide="${icon}"></i></div><div><b>${title}</b><span>ข้อมูลถึง ${date?fmtSalesDate(date):'—'} · ${esc(source||'')}</span></div><span class="fresh-state ${age!=null&&age>7?'old':''}">${age==null?'ไม่ทราบ':age===0?'วันนี้':age+' วันก่อน'}</span></div>`;
-  return `<div class="freshness-wrap"><div class="freshness-bar">${card('trending-up','ข้อมูลยอดขาย',salesDate,salesAge,SALES_HISTORY.source)}${card('file-up','ข้อมูล Report_sale / PI',piDate,piAge,PI_ITEMS.source)}</div><button class="fresh-refresh" onclick="refreshDataFiles()"><i data-lucide="history"></i>โหลดไฟล์ข้อมูลล่าสุด</button></div>`;
+  return `<div class="freshness-wrap"><div class="freshness-bar">${card('trending-up','ข้อมูลยอดขาย',salesDate,salesAge,SALES_HISTORY.source)}${card('file-up','ข้อมูล Report_sale / PI',piDate,piAge,(rm&&rm.name)||PI_ITEMS.source)}</div><button class="fresh-refresh" onclick="refreshDataFiles()"><i data-lucide="history"></i>โหลดไฟล์ข้อมูลล่าสุด</button></div>`;
 }
 function refreshDataFiles(){localStorage.setItem('pl_data_refresh',String(Date.now()));location.reload();}
 function todayWorkCenter(){
-  const open=DATA.filter(isOpenStage),sum=a=>a.reduce((s,p)=>s+(+p.value||0),0);
+  const open=DATA.filter(isOpenStage),sum=a=>a.reduce((s,p)=>s+pv(p),0);
   const calls=followUpList();
   const overdue=open.filter(p=>{const d=daysUntil(p.close);return d!=null&&d<0;});
   const stale=open.filter(p=>!(p.next||'').trim());
@@ -2384,14 +2443,14 @@ function salesGrowthAdvisor(openDeals){
 function renderDash(){
   const list=filtered();
   const open=list.filter(p=>p.stage!=='won'&&p.stage!=='lost');
-  const pipeline=open.reduce((s,p)=>s+(+p.value||0),0);
-  const weighted=open.reduce((s,p)=>s+(+p.value||0)*(+p.prob||0)/100,0);
+  const pipeline=open.reduce((s,p)=>s+pv(p),0);
+  const weighted=open.reduce((s,p)=>s+pv(p)*(+p.prob||0)/100,0);
   const won=list.filter(p=>p.stage==='won');
-  const wonVal=won.reduce((s,p)=>s+(+p.value||0),0);
+  const wonVal=won.reduce((s,p)=>s+pv(p),0);
   const totKwp=list.reduce((s,p)=>s+(+p.kwp||0),0);
 
   const lost=list.filter(p=>p.stage==='lost');
-  const lostVal=lost.reduce((s,p)=>s+(+p.value||0),0);
+  const lostVal=lost.reduce((s,p)=>s+pv(p),0);
   const decided=won.length+lost.length;
   const winRate=decided?Math.round(won.length/decided*100):0;
   const targetPct=salesTarget?Math.round(wonVal/salesTarget*100):0;
@@ -2410,18 +2469,18 @@ function renderDash(){
     if(d<0){overdueDeals.push(p);return;}
     const b=forecastBuckets.find(x=>d>=x.min&&d<=x.max); if(b)b.items.push(p); else laterDeals.push(p);
   });
-  const weightedSum=arr=>arr.reduce((s,p)=>s+(+p.value||0)*(+p.prob||0)/100,0);
+  const weightedSum=arr=>arr.reduce((s,p)=>s+pv(p)*(+p.prob||0)/100,0);
 
   const topOpps=open.slice().sort((a,b)=>weightedSum([b])-weightedSum([a])).slice(0,5);
   const dashInsight=overdueDeals.length
-    ? smartInsightHTML('alert-triangle','ไฮไลต์ประจำหน้า: ดีลเลยกำหนด',`มี ${overdueDeals.length} ดีลที่วันปิดผ่านไปแล้ว แนะนำอัปเดตวันปิดหรือสถานะก่อนดูภาพรวม`,fmtTHB(overdueDeals.reduce((s,p)=>s+(+p.value||0),0)),'bad')
+    ? smartInsightHTML('alert-triangle','ไฮไลต์ประจำหน้า: ดีลเลยกำหนด',`มี ${overdueDeals.length} ดีลที่วันปิดผ่านไปแล้ว แนะนำอัปเดตวันปิดหรือสถานะก่อนดูภาพรวม`,fmtTHB(overdueDeals.reduce((s,p)=>s+pv(p),0)),'bad')
     : (topOpps[0]
       ? smartInsightHTML('sparkles','ไฮไลต์ประจำหน้า: โอกาสขายมูลค่าสูง',`${displayName(topOpps[0])} เป็นดีลถ่วงน้ำหนักสูงสุดในมุมมองนี้ · โอกาส ${+topOpps[0].prob||0}%`,fmtTHB(weightedSum([topOpps[0]])),'')
       : smartInsightHTML('check-circle-2','ภาพรวมวันนี้ดูสะอาด','ยังไม่พบดีลเร่งด่วนในมุมมองนี้ สามารถดู Pipeline และยอดปิดได้ตามปกติ','OK',''));
 
   let h=`${dashInsight}<div class="kpis">
     <div class="kpi brand"><div class="kpi-ic"><i data-lucide="folder-open"></i></div><div><div class="lab">โครงการในมือ</div><div class="val">${open.length}</div><div class="sub">กำลังดำเนินการ · ทั้งหมด ${list.length}</div></div></div>
-    <div class="kpi accent"><div class="kpi-ic"><i data-lucide="wallet"></i></div><div><div class="lab">มูลค่า Pipeline</div><div class="val">${fmtTHB(pipeline)}</div><div class="sub">ยังไม่ปิดการขาย</div></div></div>
+    <div class="kpi accent"><div class="kpi-ic"><i data-lucide="wallet"></i></div><div><div class="lab">มูลค่า Pipeline</div><div class="val">${fmtTHB(pipeline)}</div><div class="sub">ยังไม่ปิดการขาย${(()=>{const dl=open.filter(p=>jobGroups().dup.has(p.id));return dl.length?` · ไม่นับงานซ้ำ ${dl.length} ดีล ${fmtTHB(dl.reduce((a,x)=>a+(+x.value||0),0))}`:'';})()}</div></div></div>
     <div class="kpi amber"><div class="kpi-ic"><i data-lucide="trending-up"></i></div><div><div class="lab">ถ่วงน้ำหนัก %</div><div class="val">${fmtTHB(weighted)}</div><div class="sub">Weighted forecast</div></div></div>
     <div class="kpi green"><div class="kpi-ic"><i data-lucide="badge-check"></i></div><div><div class="lab">ปิดได้แล้ว</div><div class="val">${fmtTHB(wonVal)}</div><div class="sub">${won.length} โครงการ · ${totKwp.toLocaleString()} kWp</div></div></div>
   </div>`;
@@ -2476,10 +2535,10 @@ function renderDash(){
 
   // stage funnel — bar width ตามมูลค่า
   const stageVals=STAGES.map(s=>({s,items:list.filter(p=>p.stage===s.id)}));
-  const maxV=Math.max(1,...stageVals.map(x=>x.items.reduce((a,p)=>a+(+p.value||0),0)));
+  const maxV=Math.max(1,...stageVals.map(x=>x.items.reduce((a,p)=>a+pv(p),0)));
   let funnel='';
   stageVals.forEach(({s,items})=>{
-    const val=items.reduce((a,p)=>a+(+p.value||0),0);
+    const val=items.reduce((a,p)=>a+pv(p),0);
     funnel+=`<div class="stage-row">
       <div class="nm"><span class="sd" style="background:${s.color}"></span>${s.name}</div>
       <div class="bar"><i style="width:${Math.max(val/maxV*100,val?3:0)}%;background:${s.color}"></i></div>
@@ -2491,7 +2550,7 @@ function renderDash(){
   const pm={}, pc={};
   open.forEach(p=>{
     const items=(p.products&&p.products.length)?p.products:(p.product?p.product.split(/\s*[+,]\s*/).filter(Boolean):[]);
-    const keys=items.length?items:['ไม่ระบุ']; const share=(+p.value||0)/keys.length;
+    const keys=items.length?items:['ไม่ระบุ']; const share=pv(p)/keys.length;
     keys.forEach(k=>{ pm[k]=(pm[k]||0)+share; pc[k]=(pc[k]||0)+1; });
   });
   const prods=Object.entries(pm).sort((a,b)=>b[1]-a[1]).slice(0,8);
@@ -2697,7 +2756,11 @@ function srcBadge(p){
   const review = p.review ? `<span class="src review"><i data-lucide="alert-triangle"></i>ตรวจสอบ</span>` : '';
   const ud = unclassifiedDays(p);
   const uncl = ud!=null ? `<span class="src review" title="NEW PI ออกมา ${ud} วันแล้ว ยังไม่ได้จัดเป็น 30% / 50% / 90%"><i data-lucide="alert-circle"></i>ยังไม่จัดสถานะ ${ud} วัน</span>` : '';
-  return src+lock+review+uncl;
+  const jg=jobGroups().grp.get(p.id);
+  const job = !jg ? '' : (jg.rep===p.id
+    ? `<span class="src job" title="งานเดียวกันเสนอ ${jg.members.length} ราย — นับมูลค่าดีลนี้ใน Pipeline ครั้งเดียว"><i data-lucide="layers"></i>งานเดียวกัน ${jg.members.length} ราย · นับดีลนี้</span>`
+    : `<span class="src job dup" title="งานเดียวกับดีลอื่น — ไม่นับมูลค่าดีลนี้ซ้ำใน Pipeline"><i data-lucide="layers"></i>งานเดียวกัน · ไม่นับซ้ำ</span>`);
+  return src+lock+review+uncl+job;
 }
 function catChip(t){ if(!t) return '—'; const c=prodColor(t); return `<span class="ptag" style="background:${c}1a;color:${c}"><span class="pd-dot" style="background:${c}"></span>${esc(t)}</span>`; }
 // แถบ "โอกาส" ใช้สีจาก STAGES (แหล่งเดียว) · PO WIN เต็มแถบเขียว · LOST เต็มแถบแดง
@@ -2846,12 +2909,12 @@ function renderKanban(){
   // กรองสถานะอยู่ → โชว์เฉพาะคอลัมน์นั้น (ไม่ต้องเลื่อนผ่านคอลัมน์ว่าง) จัดไว้ตรงกลาง
   const fStage=$('fStage').value;
   const stages = fStage ? STAGES.filter(s=>s.id===fStage) : STAGES;
-  const colVals=stages.map(s=>list.filter(p=>p.stage===s.id).reduce((a,p)=>a+(+p.value||0),0));
+  const colVals=stages.map(s=>list.filter(p=>p.stage===s.id).reduce((a,p)=>a+pv(p),0));
   const maxColVal=Math.max(1,...colVals);
   let cols=stages.map(s=>{
     const items=list.filter(p=>p.stage===s.id);
-    const val=items.reduce((a,p)=>a+(+p.value||0),0);
-    const weighted=items.reduce((a,p)=>a+(+p.value||0)*(+p.prob||0)/100,0);
+    const val=items.reduce((a,p)=>a+pv(p),0);
+    const weighted=items.reduce((a,p)=>a+pv(p)*(+p.prob||0)/100,0);
     const meter=Math.max(val/maxColVal*100,val?3:0);
     const cards=items.map(p=>{
       const idx=STAGES.findIndex(x=>x.id===p.stage);
@@ -2920,6 +2983,20 @@ function openDetail(id){
   const factsHtml=facts.map(([k,v])=>`<div class="dv-fact"><span>${k}</span><b>${esc(v)}</b></div>`).join('');
   // ติดตาม: ปุ่มตั้งเร็ว
   const fuQuick=`<div class="dv-sec"><div class="dv-lab">ติดตาม · Follow-up</div><div class="dv-fu"><b class="dv-fu-date${p.followUp&&daysUntil(p.followUp)<0?' od':''}">${esc(fuTxt)}</b><div class="dv-fu-btns"><button onclick="setFollowUp('${p.id}','${addDaysISO(todayISO(),1)}')">พรุ่งนี้</button><button onclick="snoozeFollowUp('${p.id}',3)">+3 วัน</button><button onclick="snoozeFollowUp('${p.id}',7)">+1 สัปดาห์</button>${p.followUp?`<button class="clr" onclick="doneFollowUp('${p.id}')">เสร็จ ✓</button>`:''}</div></div></div>`;
+  // งานเดียวกันที่เสนอหลายลูกค้า — แสดงกับดีลที่ยังไม่จบ (หรือดีลที่อยู่ในกลุ่มอยู่แล้ว)
+  let jobHtml='';
+  { const jg=jobGroups().grp.get(p.id);
+    if(jg||QUOTE_STAGES.has(p.stage)||p.stage==='poin'||(p.jobKey||'').trim()||p.jobSolo===true){
+      const repDeal=jg?DATA.find(x=>x.id===jg.rep):null;
+      const status = jg ? (jg.rep===p.id ? `นับดีลนี้ใน Pipeline · อีก ${jg.members.length-1} ดีลไม่นับซ้ำ` : `ไม่นับดีลนี้ใน Pipeline — นับที่ ${repDeal?(repDeal.customer||displayName(repDeal)):'ดีลตัวแทน'}`)
+        : (p.jobSolo===true ? 'ตั้งให้นับแยก ไม่รวมกับดีลอื่น' : 'ยังไม่ได้รวมกับดีลอื่น');
+      const how = jg ? (jg.auto?'จับคู่อัตโนมัติ: รายการสินค้า จำนวน และมูลค่าตรงกัน แต่ต่างลูกค้า':'จับคู่ด้วยรหัสงานร่วม') : '';
+      const others = jg ? jg.members.filter(m=>m.id!==p.id).map(m=>`<button type="button" class="dv-job-item" onclick="openDetail('${m.id}')">${badge(m.stage)}<span>${esc(m.customer||displayName(m))}</span><small>${esc(m.piFull||m.piRef||'')} · ${fmtTHB(+m.value||0)}${m.id===jg.rep?' · นับดีลนี้':''}</small></button>`).join('') : '';
+      jobHtml=`<div class="dv-sec"><div class="dv-lab">งานเดียวกันที่เสนอหลายลูกค้า</div><div class="dv-fu"><b class="dv-fu-date">${esc(status)}</b></div>${how?`<div class="dv-text" style="color:var(--ink3);font-size:12px;margin-top:6px">${how}</div>`:''}${others?`<div class="dv-job-list">${others}</div>`:''}
+        <div class="dv-job-set"><input id="dvJobKey" value="${esc(p.jobKey||'')}" placeholder="รหัสงานร่วม เช่น SCG-12MW" autocomplete="off"><div class="dv-fu-btns"><button onclick="setJobKey('${p.id}')">บันทึกรหัส</button>${(jg||p.jobSolo===true)?`<button onclick="toggleJobSolo('${p.id}')">${p.jobSolo===true?'รวมกลับ':'แยกนับดีลนี้'}</button>`:''}</div></div>
+        <div class="dv-text" style="color:var(--ink3);font-size:12px;margin-top:6px">ดีลที่ใส่รหัสงานร่วมเดียวกันจะนับมูลค่าใน Pipeline ครั้งเดียว ใช้เมื่อเสนองานเดียวกันหลายรายแต่ราคาไม่เท่ากัน</div></div>`;
+    }
+  }
   // ค้างรับ / รอส่ง — เฉพาะ PO IN (งานทยอยรับ) หรือดีลที่เคยใส่ข้อมูลไว้
   let deliveryHtml='';
   if(p.stage==='poin'||(p.delivery||'').trim()){
@@ -2960,6 +3037,7 @@ function openDetail(id){
     <div class="dv-facts">${factsHtml}</div>
     ${fuQuick}
     ${deliveryHtml}
+    ${jobHtml}
     ${liHtml}
     <div class="dv-sec"><div class="dv-lab">สินค้า</div><div style="display:flex;flex-wrap:wrap;gap:6px">${prodHtml}</div></div>
     ${(p.next||'').trim()?`<div class="dv-sec"><div class="dv-lab">ขั้นตอนถัดไป</div><div class="dv-text">${esc(p.next)}</div></div>`:''}
@@ -4111,6 +4189,83 @@ function renderAR(){
   fitARProjectNames(); requestAnimationFrame(fitARProjectNames);   // ย่อฟอนต์ชื่อโครงการให้พอดีช่อง
 }
 
+// วันที่ของรายงานจากชื่อไฟล์ Report_sale_YYYYMMDD.xls (ค.ศ.)
+function reportDateFromName(n){ const m=String(n||'').match(/Report_sale_(\d{4})(\d{2})(\d{2})/i); return m?`${m[1]}-${m[2]}-${m[3]}`:''; }
+function rememberReport(name,date,builtAt){
+  try{ localStorage.setItem('pl_report_meta',JSON.stringify({name:name||'',date:date||reportDateFromName(name)||'',builtAt:builtAt||'',importedAt:new Date().toISOString()})); }catch(e){}
+}
+function reportMeta(){ try{ return JSON.parse(localStorage.getItem('pl_report_meta')||'null'); }catch(e){ return null; } }
+// ดีลในรายงานตรงกับที่มีอยู่ทุกอย่าง (revision/สถานะ/มูลค่า/สินค้า) → ไม่ต้องแตะ ไม่ต้องเพิ่มประวัติ
+function piUnchanged(ex,rep){
+  return (rep.piRev||0)===(ex.piRev||0) && ex.stage===rep.stage && (+ex.value||0)===(+rep.value||0) && (ex.piStatus||'')===(rep.piStatus||'')
+    && JSON.stringify(ex.lineItems||[])===JSON.stringify(rep.lineItems||[]);
+}
+function previewPIDeals(deals){
+  const c={total:deals.length,cNew:0,cUpd:0,cRev:0,cSkip:0,cSame:0,cStatusChg:0,cNewWin:0};
+  const refs=new Set(deals.map(d=>d.pi.replace(/-R\d+$/i,'')));
+  deals.forEach(d=>{
+    const rep=dealToProject(d), ex=DATA.find(x=>x.piRef&&x.piRef===rep.piRef);
+    if(!ex){ c.cNew++; return; }
+    const newRev=rep.piRev||0, exRev=ex.piRev||0;
+    if(newRev<exRev){ c.cSkip++; return; }                 // ไฟล์เก่ากว่า (revision ต่ำกว่า)
+    if(newRev===exRev && ex.locked){ c.cSkip++; return; }  // ล็อก + revision เดิม → ไม่แตะ
+    if(piUnchanged(ex,rep)){ c.cSame++; return; }
+    c.cUpd++;
+    if(newRev>exRev) c.cRev++;
+    if(rep.stage!==ex.stage){ c.cStatusChg++; if(rep.stage==='won') c.cNewWin++; }
+  });
+  c.orphan=DATA.filter(x=>x.piRef && !refs.has(x.piRef)).length;
+  c.manual=DATA.filter(x=>!x.piRef).length;
+  return c;
+}
+function applyPIDeals(deals){
+  let created=0, updated=0, skipped=0, reviews=0, same=0;
+  deals.forEach(d=>{
+    const rep=dealToProject(d);
+    const i=DATA.findIndex(x=>x.piRef && x.piRef===rep.piRef);
+    if(i>=0){
+      const ex=DATA[i];
+      const newRev=rep.piRev||0, exRev=ex.piRev||0;
+      const backfillNames=()=>{ // เติมชื่อสินค้าให้รายการเดิมที่ยังไม่มี (ไม่แตะสถานะ/มูลค่า)
+        if(rep.lineItems&&rep.lineItems.some(it=>it.name)&&(!ex.lineItems||!ex.lineItems.some(it=>it.name))){ ex.lineItems=rep.lineItems; }
+      };
+      if(newRev<exRev){ backfillNames(); skipped++; return; }                  // ไฟล์เก่ากว่า ไม่ทับ
+      if(newRev===exRev && ex.locked){ backfillNames(); skipped++; return; }   // ล็อก + revision เดิม → ข้าม (กันทับที่แก้มือ)
+      if(piUnchanged(ex,rep)){ same++; return; }                               // ไม่มีอะไรเปลี่ยน → ไม่แตะ (คง % ที่ตั้งเองไว้ด้วย)
+      const oldStage=ex.stage, oldValue=ex.value, oldRev=exRev;
+      // อัปเดตข้อมูลจากรายงาน (revision ใหม่กว่า → ทับได้แม้ถูกล็อก) — คงสิ่งที่ผู้ใช้แก้มือไว้
+      DATA[i]={...ex,
+        stage:rep.stage, prob:(oldStage===rep.stage?ex.prob:rep.prob), value:rep.value,
+        products:rep.products, product:rep.product, type:rep.type,
+        piFull:rep.piFull, piRev:newRev, piStatus:rep.piStatus, piDate:rep.piDate, piUpdated:rep.piUpdated, lineItems:rep.lineItems,
+        kwp:ex.kwp||rep.kwp,   // คง kWp ที่ตั้งเองไว้ · ถ้ายังไม่มีค่อยเติมจาก PI (เช็คไม่ตรงด้านล่าง)
+
+        custTel:ex.custTel||rep.custTel, custEmail:ex.custEmail||rep.custEmail,
+        custTaxId:ex.custTaxId||rep.custTaxId, custAddress:ex.custAddress||rep.custAddress,
+        custType:ex.custType||rep.custType, custSale:ex.custSale||rep.custSale,
+        locked: rep.stage==='won',   // ปิดได้ = ล็อก (กันทับ revision เดิม) แต่ revision ใหม่ยังเข้าได้
+        updated:Date.now()
+      }; // คงไว้: name, projName, contact, next, notes, kwh, close, followUp, delivery, jobKey
+      const changes=[];
+      if(newRev>oldRev) changes.push(`revision R${oldRev}→R${newRev}`);
+      if(oldStage!==rep.stage) changes.push(`สถานะ ${stageById(oldStage).name} → ${stageById(rep.stage).name}`);
+      if(String(oldValue||'')!==String(rep.value||'')) changes.push(`มูลค่า ${fmtFull(rep.value)}`);
+      // คงค่าที่ตั้งเอง (ชื่อโครงการ/ขนาด kWp/ผู้ติดต่อ/วันปิด) — ถ้าไม่ตรงกับ PI ใหม่ ติดธง ⚠ ให้ตรวจสอบ
+      const flags=[];
+      if(ex.kwp && rep.kwp && Math.abs((+ex.kwp||0)-(+rep.kwp||0))>=0.5) flags.push(`ขนาด kWp ตั้งไว้ ${ex.kwp} · PI คำนวณได้ ${rep.kwp}`);
+      const hadManual = (ex.projName||'').trim() || ex.close || ex.kwh;
+      if(newRev>oldRev && hadManual) flags.push('revision ใหม่ทับดีลที่ตั้งค่าเอง — เช็คชื่อโครงการ/วันปิด');
+      if(flags.length){ DATA[i].review=true; reviews++; addActivity(DATA[i],'⚠ ตรวจสอบ: '+flags.join(' · '),'review'); }
+      addActivity(DATA[i],`นำเข้า PI${changes.length?' · '+changes.join(' · '):' · อัปเดตข้อมูล'}`,'import');
+      updated++;
+    } else {
+      rep.id=uid(); rep.created=Date.now(); rep.activities=[];
+      addActivity(rep,'สร้างโครงการจากการนำเข้า PI','import');
+      DATA.unshift(rep); created++;
+    }
+  });
+  return {created,updated,skipped,reviews,same};
+}
 function importPI(input){
   const file=input.files&&input.files[0]; input.value='';
   if(!file) return;
@@ -4119,77 +4274,42 @@ function importPI(input){
     let deals;
     try{ deals=parsePIReport(rd.result); }catch(e){ toast('อ่านไฟล์ไม่สำเร็จ','err'); return; }
     if(!deals.length){ toast('ไม่พบใบเสนอราคาในไฟล์ (ต้องเป็น Report_sale)','err'); return; }
-    const refs=new Set(deals.map(d=>d.pi.replace(/-R\d+$/i,'')));
-    // เทียบกับของเดิม (ไฟล์เก่าที่อยู่ในแอป)
-    let cNew=0, cUpd=0, cRev=0, cSkip=0, cStatusChg=0, cNewWin=0;
-    deals.forEach(d=>{
-      const r=d.pi.replace(/-R\d+$/i,''); const ex=DATA.find(x=>x.piRef===r);
-      if(!ex){ cNew++; return; }
-      const newRev=piRevFromRef(d.pi), exRev=ex.piRev||0;
-      if(newRev<exRev){ cSkip++; return; }                 // ไฟล์เก่ากว่า (revision ต่ำกว่า)
-      if(newRev===exRev && ex.locked){ cSkip++; return; }  // ล็อก + revision เดิม → ไม่แตะ
-      cUpd++;
-      if(newRev>exRev) cRev++;                             // มี revision ใหม่กว่า
-      const ns=mapStatus(d.status).stage;
-      if(ns!==ex.stage){ cStatusChg++; if(ns==='won') cNewWin++; }
-    });
-    const orphan=DATA.filter(x=>x.piRef && !refs.has(x.piRef)).length;
-    const manual=DATA.filter(x=>!x.piRef).length;
-    if(!confirm(`เทียบกับข้อมูลเดิม — พบ ${deals.length} ดีลในไฟล์ใหม่\n\n`+
-      `• สร้างใหม่ ${cNew}\n`+
-      `• อัปเดต ${cUpd}`+(cRev?` (มี revision ใหม่ ${cRev})`:'')+(cStatusChg?` · เปลี่ยนสถานะ ${cStatusChg}${cNewWin?` · ปิดได้ใหม่ ${cNewWin}`:''}`:'')+`\n`+
-      (cSkip?`• ข้าม ${cSkip} (revision เดิม/เก่ากว่า หรือถูกล็อก)\n`:'')+
-      (orphan?`• ดีลเดิมที่ไม่อยู่ในไฟล์ใหม่ ${orphan} (คงไว้)\n`:'')+
-      (manual?`• เพิ่มเอง ${manual} (ไม่แตะ)\n`:'')+`\nยืนยันนำเข้า?`)) return;
-    let created=0, updated=0, skipped=0, reviews=0;
-    deals.forEach(d=>{
-      const rep=dealToProject(d);
-      const i=DATA.findIndex(x=>x.piRef && x.piRef===rep.piRef);
-      if(i>=0){
-        const ex=DATA[i];
-        const newRev=rep.piRev||0, exRev=ex.piRev||0;
-        const backfillNames=()=>{ // เติมชื่อสินค้าให้รายการเดิมที่ยังไม่มี (ไม่แตะสถานะ/มูลค่า)
-          if(rep.lineItems&&rep.lineItems.some(it=>it.name)&&(!ex.lineItems||!ex.lineItems.some(it=>it.name))){ ex.lineItems=rep.lineItems; }
-        };
-        if(newRev<exRev){ backfillNames(); skipped++; return; }                  // ไฟล์เก่ากว่า ไม่ทับ
-        if(newRev===exRev && ex.locked){ backfillNames(); skipped++; return; }   // ล็อก + revision เดิม → ข้าม (กันทับที่แก้มือ)
-        const oldStage=ex.stage, oldValue=ex.value, oldRev=exRev;
-        // อัปเดตข้อมูลจากรายงาน (revision ใหม่กว่า → ทับได้แม้ถูกล็อก) — คงสิ่งที่ผู้ใช้แก้มือไว้
-        DATA[i]={...ex,
-          stage:rep.stage, prob:rep.prob, value:rep.value,
-          products:rep.products, product:rep.product, type:rep.type,
-          piFull:rep.piFull, piRev:newRev, piStatus:rep.piStatus, piDate:rep.piDate, piUpdated:rep.piUpdated, lineItems:rep.lineItems,
-          kwp:ex.kwp||rep.kwp,   // คง kWp ที่ตั้งเองไว้ · ถ้ายังไม่มีค่อยเติมจาก PI (เช็คไม่ตรงด้านล่าง)
-
-          custTel:ex.custTel||rep.custTel, custEmail:ex.custEmail||rep.custEmail,
-          custTaxId:ex.custTaxId||rep.custTaxId, custAddress:ex.custAddress||rep.custAddress,
-          custType:ex.custType||rep.custType, custSale:ex.custSale||rep.custSale,
-          locked: rep.stage==='won',   // ปิดได้ = ล็อก (กันทับ revision เดิม) แต่ revision ใหม่ยังเข้าได้
-          updated:Date.now()
-        }; // คงไว้: name, projName, contact, next, notes, kwh, close, followUp
-        const changes=[];
-        if(newRev>oldRev) changes.push(`revision R${oldRev}→R${newRev}`);
-        if(oldStage!==rep.stage) changes.push(`สถานะ ${stageById(oldStage).name} → ${stageById(rep.stage).name}`);
-        if(String(oldValue||'')!==String(rep.value||'')) changes.push(`มูลค่า ${fmtFull(rep.value)}`);
-        // คงค่าที่ตั้งเอง (ชื่อโครงการ/ขนาด kWp/ผู้ติดต่อ/วันปิด) — ถ้าไม่ตรงกับ PI ใหม่ ติดธง ⚠ ให้ตรวจสอบ
-        const flags=[];
-        if(ex.kwp && rep.kwp && Math.abs((+ex.kwp||0)-(+rep.kwp||0))>=0.5) flags.push(`ขนาด kWp ตั้งไว้ ${ex.kwp} · PI คำนวณได้ ${rep.kwp}`);
-        const hadManual = (ex.projName||'').trim() || ex.close || ex.kwh;
-        if(newRev>oldRev && hadManual) flags.push('revision ใหม่ทับดีลที่ตั้งค่าเอง — เช็คชื่อโครงการ/วันปิด');
-        if(flags.length){ DATA[i].review=true; reviews++; addActivity(DATA[i],'⚠ ตรวจสอบ: '+flags.join(' · '),'review'); }
-        addActivity(DATA[i],`นำเข้า PI${changes.length?' · '+changes.join(' · '):' · อัปเดตข้อมูล'}`,'import');
-        updated++;
-      } else {
-        rep.id=uid(); rep.created=Date.now(); rep.activities=[];
-        addActivity(rep,'สร้างโครงการจากการนำเข้า PI','import');
-        DATA.unshift(rep); created++;
-      }
-    });
+    const c=previewPIDeals(deals);
+    if(!confirm(`เทียบกับข้อมูลเดิม — พบ ${c.total} ดีลในไฟล์ใหม่\n\n`+
+      `• สร้างใหม่ ${c.cNew}\n`+
+      `• อัปเดต ${c.cUpd}`+(c.cRev?` (มี revision ใหม่ ${c.cRev})`:'')+(c.cStatusChg?` · เปลี่ยนสถานะ ${c.cStatusChg}${c.cNewWin?` · ปิดได้ใหม่ ${c.cNewWin}`:''}`:'')+`\n`+
+      (c.cSame?`• เหมือนเดิม ${c.cSame} (ไม่แตะ)\n`:'')+
+      (c.cSkip?`• ข้าม ${c.cSkip} (revision เก่ากว่า หรือถูกล็อก)\n`:'')+
+      (c.orphan?`• ดีลเดิมที่ไม่อยู่ในไฟล์ใหม่ ${c.orphan} (คงไว้)\n`:'')+
+      (c.manual?`• เพิ่มเอง ${c.manual} (ไม่แตะ)\n`:'')+`\nยืนยันนำเข้า?`)) return;
+    const r=applyPIDeals(deals);
+    const d=reportDateFromName(file.name), cur=reportMeta();
+    if(d&&(!cur||!cur.date||d>=cur.date)) rememberReport(file.name,d,'');
     sort={key:'pidate',dir:-1};   // นำเข้าแล้วเรียงตามวันที่ PI ล่าสุดก่อน
     commit(); render();
-    toast(`นำเข้าแล้ว · ใหม่ ${created} · อัปเดต ${updated}`+(skipped?` · 🔒 ล็อก ${skipped}`:'')+(reviews?` · ⚠ ตรวจสอบ ${reviews}`:''),'ok');
+    toast(`นำเข้าแล้ว · ใหม่ ${r.created} · อัปเดต ${r.updated}`+(r.same?` · เหมือนเดิม ${r.same}`:'')+(r.skipped?` · 🔒 ล็อก ${r.skipped}`:'')+(r.reviews?` · ⚠ ตรวจสอบ ${r.reviews}`:''),'ok');
   };
   rd.readAsText(file,'utf-8');
+}
+// นำเข้าเองตอนเปิดแอป: report_latest.js (สร้างจาก Report_sale ล่าสุดด้วย scripts/build_report_latest.py) อยู่คู่กับ index.html ในเครื่อง
+// บนเว็บ/iPhone ไม่มีไฟล์นี้ (ห้ามขึ้น GitHub) — iPhone ได้ข้อมูลผ่านการซิงก์ Google Sheet หลังจากเครื่องนี้นำเข้าแล้ว
+function autoImportReport(again){
+  const f=window.PI_REPORT_FILE; if(!f||!f.html||!f.name) return;
+  const date=f.date||reportDateFromName(f.name), cur=reportMeta();
+  if(!date) return;
+  if(cur&&cur.date&&date<cur.date) return;   // ไฟล์เก่ากว่าที่นำเข้าไปแล้ว → ไม่ย้อน
+  if(!again&&cur&&cur.date){
+    if(date<cur.date) return;                                                     // ไฟล์เก่ากว่าที่นำเข้าไปแล้ว → ไม่ย้อน
+    if(date===cur.date&&cur.name===f.name&&(cur.builtAt||'')===(f.builtAt||'')) return;   // ไฟล์นี้นำเข้าแล้ว
+  }
+  let deals;
+  try{ deals=parsePIReport(f.html); }catch(e){ toast(`อ่าน ${f.name} ไม่สำเร็จ`,'err'); return; }
+  if(!deals.length){ toast(`ไม่พบใบเสนอราคาใน ${f.name}`,'err'); return; }
+  const r=applyPIDeals(deals);
+  rememberReport(f.name,date,f.builtAt||'');
+  if(r.created||r.updated||r.reviews){ sort={key:'pidate',dir:-1}; if(syncUrl) localStorage.setItem('pl_report_pending','1'); commit(); }
+  render();
+  toast(`อัปเดตจาก ${f.name} · ${deals.length} ใบ · ใหม่ ${r.created} · เปลี่ยน ${r.updated}`+(r.reviews?` · ⚠ ตรวจสอบ ${r.reviews}`:''),'ok');
 }
 
 function emptyState(){
@@ -4294,6 +4414,17 @@ async function pushNow(showToast,force){
   if(!syncUrl) return;
   if(_pushing){ _pushAgain=true; return; }
   _pushing=true; setBusy(true);
+  // เครื่องที่ยังไม่เคยรู้เลขรุ่นของ Sheet (เช่น เพิ่งใส่รหัสซิงก์ หรือค้างข้อมูลเก่าไว้นาน) ห้ามส่งทับทันที — ดูก่อนว่าใน Sheet มีอะไร
+  if(!force && localStorage.getItem('pl_rev')===null){
+    let chk;
+    try{ chk=await checkSheetBeforeFirstPush(); }
+    catch(e){ _pushing=false; setBusy(false); updateSyncUI(); if(showToast) toast(syncErrText(e,'ซิงก์ไม่สำเร็จ — ตรวจ URL'),'err'); return; }
+    if(chk!=='push'){
+      _pushing=false; setBusy(false);
+      if(chk==='pull') await pullNow(!showToast); else resolveSyncConflict(showToast);
+      return;
+    }
+  }
   try{
     do{
       _pushAgain=false;
@@ -4305,7 +4436,7 @@ async function pushNow(showToast,force){
       const j=await syncPost(body);
       if(j&&j.rev!=null) localStorage.setItem('pl_rev',String(j.rev));
       if(localStorage.getItem('pl_dirty')===stamp) localStorage.removeItem('pl_dirty');   // ถ้ามีการแก้ใหม่ระหว่างส่ง ยังถือว่าค้างส่ง
-      localStorage.removeItem('pl_conflict');
+      localStorage.removeItem('pl_conflict'); localStorage.removeItem('pl_report_pending');
       markSyncSuccess();
       if(j&&j.backup===false) toast('ซิงก์แล้ว แต่ Sheet สร้างชีตสำรองของวันนี้ไม่สำเร็จ','err');
     }while(_pushAgain);
@@ -4318,11 +4449,20 @@ async function pushNow(showToast,force){
   }
   _pushing=false; setBusy(false);
 }
+// คืน 'push' = ส่งได้ (Sheet ว่าง หรือหลังบ้านรุ่นเก่าที่ไม่มีเลขรุ่น) · 'pull' = เครื่องนี้ว่าง ให้ดึงลงมา · 'ask' = ทั้งสองฝั่งมีข้อมูล ให้ผู้ใช้เลือก
+async function checkSheetBeforeFirstPush(){
+  const r=await fetch(syncQS('load')+'&v=2'); const j=await r.json();
+  if(Array.isArray(j)) return 'push';
+  if(j&&j.ok===false) throw new Error(j.error||'load failed');
+  const remote=(j&&Array.isArray(j.data))?j.data:[];
+  if(!remote.length){ if(j.rev!=null) localStorage.setItem('pl_rev',String(j.rev)); return 'push'; }
+  return DATA.length?'ask':'pull';
+}
 // Sheet ถูกแก้จากเครื่องอื่นหลังจากเครื่องนี้ดึงครั้งล่าสุด → ให้ผู้ใช้เลือกเอง ไม่ทับให้เงียบ ๆ
 async function resolveSyncConflict(manual){
   if(localStorage.getItem('pl_conflict')&&!manual){ updateSyncUI(); return; }   // ถามไปแล้วรอบหนึ่ง ไม่ถามซ้ำทุกครั้งที่บันทึก
   localStorage.setItem('pl_conflict','1'); updateSyncUI();
-  if(confirm('ข้อมูลใน Sheet ถูกแก้จากเครื่องอื่น หลังจากที่เครื่องนี้ดึงข้อมูลครั้งล่าสุด\n\nกด OK = ใช้ข้อมูลจาก Sheet (การแก้ไขที่ยังไม่ได้ส่งของเครื่องนี้จะหาย)\nกด Cancel = ยังไม่ดึง')){
+  if(confirm('ข้อมูลใน Sheet ไม่ตรงกับชุดที่เครื่องนี้ใช้อยู่ (ถูกแก้จากเครื่องอื่น หรือเครื่องนี้ยังไม่เคยดึงชุดล่าสุด)\n\nกด OK = ใช้ข้อมูลจาก Sheet (การแก้ไขที่ยังไม่ได้ส่งของเครื่องนี้จะหาย · ถ้ามีไฟล์ Report_sale ล่าสุด แอปจะนำเข้าซ้ำให้เอง)\nกด Cancel = ยังไม่ดึง')){
     localStorage.removeItem('pl_dirty'); localStorage.removeItem('pl_conflict'); await pullNow(false); return;
   }
   if(confirm('ต้องการส่งข้อมูลของเครื่องนี้ขึ้นไปทับ Sheet แทนหรือไม่?\n(การแก้ไขจากเครื่องอื่นที่อยู่ใน Sheet จะหาย · Sheet มีชีตสำรองรายวันอยู่)\n\nกด Cancel = ยังไม่ทำอะไร ข้อมูลในเครื่องนี้ยังอยู่ และยังไม่ถูกส่ง')){ await pushNow(true,true); return; }
@@ -4429,7 +4569,8 @@ async function pullNow(silent){
       // สร้าง products[] กลับจากสตริง และรักษา activity ในเครื่องเมื่อ backend รุ่นเดิมยังไม่มีคอลัมน์นี้
       const localActs=new Map(DATA.map(p=>[p.id,normalizeActivities(p.activities)]));
       const localReview=new Map(DATA.map(p=>[p.id,!!p.review]));
-      const localDelivery=new Map(DATA.map(p=>[p.id,p.delivery||'']));   // หลังบ้านรุ่นที่ยังไม่มีคอลัมน์ delivery → คงค่าที่อยู่ในเครื่องไว้   // เก็บธง ⚠ ในเครื่องไว้ เผื่อ Sheet ยังไม่มีคอลัมน์ review
+      const localDelivery=new Map(DATA.map(p=>[p.id,p.delivery||'']));
+      const localJob=new Map(DATA.map(p=>[p.id,{k:p.jobKey||'',s:p.jobSolo===true}]));   // หลังบ้านรุ่นที่ยังไม่มีคอลัมน์ delivery → คงค่าที่อยู่ในเครื่องไว้   // เก็บธง ⚠ ในเครื่องไว้ เผื่อ Sheet ยังไม่มีคอลัมน์ review
       DATA=arr.map(p=>{
         const remoteActs=normalizeActivities(p.activities);
         return {...p, id:safeId(p.id),
@@ -4437,6 +4578,8 @@ async function pullNow(silent){
           locked:(p.locked===true||p.locked==='true'||p.locked===1||p.stage==='won'),
           review:(p.review===true||p.review==='true'||p.review==='TRUE'||p.review===1) || (p.review===undefined && !!localReview.get(p.id)),
           delivery:(p.delivery!==undefined?String(p.delivery||''):(localDelivery.get(p.id)||'')),
+          jobKey:(p.jobKey!==undefined?String(p.jobKey||''):((localJob.get(p.id)||{}).k||'')),
+          jobSolo:(p.jobSolo!==undefined?(p.jobSolo===true||p.jobSolo==='true'||p.jobSolo==='TRUE'):!!(localJob.get(p.id)||{}).s),
           activities:remoteActs.length?remoteActs:(localActs.get(p.id)||[])
         };
       });
@@ -4445,13 +4588,15 @@ async function pullNow(silent){
       if(!persist()){ setBusy(false); render(); return; }   // เก็บลงเครื่องไม่สำเร็จ → ไม่ถือว่าซิงก์แล้ว
       if(!Array.isArray(j)&&j.rev!=null) localStorage.setItem('pl_rev',String(j.rev)); else localStorage.removeItem('pl_rev');
       localStorage.removeItem('pl_dirty'); localStorage.removeItem('pl_conflict'); markSyncSuccess(); await pullAppData(true); if(!silent) toast('ดึงข้อมูลจาก Sheet แล้ว','ok');
+      // รายงานที่นำเข้าเองไว้แต่ยังไม่ได้ส่งขึ้น ถูกข้อมูลจาก Sheet แทนที่ไปแล้ว → นำเข้าซ้ำบนชุดล่าสุดหนึ่งครั้ง
+      if(localStorage.getItem('pl_report_pending')){ localStorage.removeItem('pl_report_pending'); setBusy(false); try{ autoImportReport(true); }catch(e){ console.error(e); } return; }
     }
   }catch(e){ if(!silent) toast(syncErrText(e,'ดึงข้อมูลไม่สำเร็จ'),'err'); }
   setBusy(false); render();
 }
 /* commit = save local + push */
 function commit(){
-  _localGen++;
+  _localGen++; _jobCache=null;
   if(!persist()) return;   // บันทึกลงเครื่องไม่สำเร็จ → ห้ามตั้งธงค้างส่ง/ส่งขึ้น (ไม่งั้นเปิดใหม่จะส่งชุดเก่าขึ้นไปทับ)
   localStorage.setItem('pl_updated',String(Date.now())); updateStamp(); if(syncUrl){ markDirty(); updateSyncUI(); pushNow(false); }
 }

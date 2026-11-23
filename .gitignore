@@ -1,0 +1,23 @@
+# ============================================================
+#  ห้าม commit ขึ้น GitHub สาธารณะ — มีข้อมูลส่วนบุคคล (PDPA)
+#  ลูกค้า/เบอร์/TaxID/ที่อยู่ · ยอดขาย · ดีลจริง
+# ============================================================
+customers.js
+sales_history.js
+pi_items.js
+sheet001.html
+Report_sale_*.xls
+report_latest.js
+*.xls
+*.xlsx
+
+# ===== junk / ไฟล์เฉพาะเครื่อง =====
+.DS_Store
+.claude/
+
+# ============================================================
+#  ✅ ไฟล์ที่ปลอดภัย/อัปได้ (ไม่ถูก ignore):
+#     index.html · apple-touch-icon.png · README.md · AppsScript.gs
+#     Icon.jpg · clean_customers.py · scripts/*.py
+#     (favicon ฝัง inline ใน index.html แล้ว — ไม่ต้องมีไฟล์แยก)
+# ============================================================
