@@ -1705,6 +1705,7 @@ function hydratePiItems(){
     const src=p.piRef&&byRef[p.piRef];
     if(!src||!src.items||!src.items.length) return;
     if(src.piFull&&p.piRev!=null&&piRevFromRef(src.piFull)<p.piRev) return;   // ดีลในแอปเป็น revision ใหม่กว่าไฟล์ → ไม่ย้อนรายการสินค้า
+    if((p.lineItems||[]).length) return;   // มีรายการสินค้าแล้ว (จากการนำเข้ารายงาน) → ไม่ทับด้วย pi_items.js ซึ่งเป็นชุดเก่ากว่า
     const same=JSON.stringify(p.lineItems||[])===JSON.stringify(src.items);
     if(!same){p.lineItems=src.items;p.piFull=src.piFull||p.piFull;changed=true;}
   });
@@ -4293,6 +4294,14 @@ function importPI(input){
 }
 // นำเข้าเองตอนเปิดแอป: report_latest.js (สร้างจาก Report_sale ล่าสุดด้วย scripts/build_report_latest.py) อยู่คู่กับ index.html ในเครื่อง
 // บนเว็บ/iPhone ไม่มีไฟล์นี้ (ห้ามขึ้น GitHub) — iPhone ได้ข้อมูลผ่านการซิงก์ Google Sheet หลังจากเครื่องนี้นำเข้าแล้ว
+// ข้อมูลที่เพิ่งดึงจาก Sheet ยังไม่มีใบเสนอราคาบางใบของรายงานล่าสุด = รายงานนี้ยังไม่เคยถูกรวมเข้าชุดนี้ → ต้องนำเข้าอีกรอบ
+// (ดูเฉพาะ "มีใบที่ขาด" ไม่ดูสถานะ เพื่อไม่ไปทับสถานะที่แก้เองในแอปซ้ำ ๆ)
+function reportMissingFromData(){
+  const f=window.PI_REPORT_FILE; if(!f||!f.html) return false;
+  const cur=reportMeta(), date=f.date||reportDateFromName(f.name);
+  if(cur&&cur.date&&date&&date<cur.date) return false;
+  try{ const have=new Set(DATA.map(p=>p.piRef).filter(Boolean)); return parsePIReport(f.html).some(d=>!have.has(d.pi.replace(/-R\d+$/i,''))); }catch(e){ return false; }
+}
 function autoImportReport(again){
   const f=window.PI_REPORT_FILE; if(!f||!f.html||!f.name) return;
   const date=f.date||reportDateFromName(f.name), cur=reportMeta();
@@ -4589,7 +4598,7 @@ async function pullNow(silent){
       if(!Array.isArray(j)&&j.rev!=null) localStorage.setItem('pl_rev',String(j.rev)); else localStorage.removeItem('pl_rev');
       localStorage.removeItem('pl_dirty'); localStorage.removeItem('pl_conflict'); markSyncSuccess(); await pullAppData(true); if(!silent) toast('ดึงข้อมูลจาก Sheet แล้ว','ok');
       // รายงานที่นำเข้าเองไว้แต่ยังไม่ได้ส่งขึ้น ถูกข้อมูลจาก Sheet แทนที่ไปแล้ว → นำเข้าซ้ำบนชุดล่าสุดหนึ่งครั้ง
-      if(localStorage.getItem('pl_report_pending')){ localStorage.removeItem('pl_report_pending'); setBusy(false); try{ autoImportReport(true); }catch(e){ console.error(e); } return; }
+      if(localStorage.getItem('pl_report_pending')||reportMissingFromData()){ localStorage.removeItem('pl_report_pending'); setBusy(false); try{ autoImportReport(true); }catch(e){ console.error(e); } return; }
     }
   }catch(e){ if(!silent) toast(syncErrText(e,'ดึงข้อมูลไม่สำเร็จ'),'err'); }
   setBusy(false); render();

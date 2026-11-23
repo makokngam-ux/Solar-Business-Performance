@@ -6,12 +6,17 @@
 สคริปต์นี้จึงห่อเนื้อหาไฟล์รายงานล่าสุดเป็นไฟล์ .js ที่แอปโหลดได้ แล้วแอปจะนำเข้าเองตอนเปิด
 
 วิธีใช้ (รันทุกครั้งหลังวางไฟล์ Report_sale ใหม่):
-    python3 scripts/build_report_latest.py
+    python3 scripts/build_report_latest.py            # สร้างไฟล์ แล้วเปิดแอปในเครื่องให้นำเข้าและซิงก์ขึ้น Sheet
+    python3 scripts/build_report_latest.py --no-open  # สร้างไฟล์อย่างเดียว ไม่เปิดเบราว์เซอร์
+
+สำคัญ: การนำเข้าเกิดเฉพาะเมื่อเปิดแอปจากไฟล์ในเครื่อง (index.html ในโฟลเดอร์นี้) เท่านั้น
+แอปที่เปิดจากเว็บ github.io ไม่มีไฟล์รายงาน (ห้ามขึ้น GitHub) จะได้ข้อมูลผ่านการซิงก์ Google Sheet หลังจากนั้น
 
 ไม่ต้องติดตั้งอะไรเพิ่ม · ไม่แก้และไม่ลบไฟล์ Report_sale · report_latest.js มีข้อมูลลูกค้า ห้ามขึ้น GitHub
 """
 import json
 import re
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -64,6 +69,10 @@ def main():
         encoding="utf-8",
     )
     print("สร้าง report_latest.js จาก %s แล้ว (%d ใบ PI)" % (src.name, count))
+    if "--no-open" not in sys.argv and sys.platform == "darwin":
+        # เปิดแอปจากไฟล์ในเครื่อง: แอปจะนำเข้ารายงานนี้เองแล้วซิงก์ขึ้น Google Sheet (เว็บ/iPhone เห็นหลังดึงข้อมูล)
+        subprocess.run(["open", str(ROOT / "index.html")], check=False)
+        print("เปิดแอปในเครื่องแล้ว — รอให้ป้ายมุมขวาบนขึ้น \"ซิงก์แล้ว\"")
     return 0
 
 
