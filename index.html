@@ -1071,6 +1071,26 @@ body{min-height:100dvh;background-repeat:no-repeat;background-color:#f5f7fa}
 .dv-job-item small{font-size:12px;font-weight:500;color:var(--ink3);flex-basis:100%}
 .dv-job-set{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px}
 .dv-job-set input{flex:1;min-width:170px;min-height:36px;padding:6px 10px;border:1px solid var(--line);border-radius:9px;font:500 12.5px 'Prompt',sans-serif;color:var(--ink);background:#fff}
+
+/* ===== ศูนย์นำเข้าข้อมูล (24 พ.ย. 2026) ===== */
+.tool-actions .import-hub-btn span{display:inline}
+.import-modal{max-width:880px;width:calc(100% - 28px)}
+.import-hint{font-size:12.5px;color:var(--ink3);margin:0 0 12px;line-height:1.55}
+.import-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.import-slot{display:flex;flex-direction:column;gap:10px;border:1.5px solid var(--line);border-radius:16px;padding:14px;background:#fff;transition:border-color .15s,background .15s,box-shadow .15s}
+.import-slot.drag{border-color:var(--accent);border-style:dashed;background:#f0fdfa;box-shadow:0 0 0 4px rgba(15,118,110,.1)}
+.is-head{display:flex;align-items:center;gap:10px}
+.is-ic{width:40px;height:40px;border-radius:12px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;flex:none}.is-ic svg{width:20px;height:20px}
+.is-head b{display:block;font-size:14.5px;font-weight:700;color:var(--ink)}.is-head small{font-size:12px;color:var(--ink3)}
+.is-file,.is-status{border-radius:11px;padding:9px 11px;background:var(--surface);display:grid;gap:2px;min-width:0}
+.is-file span{font-size:12px;color:var(--ink3)}.is-file b{font-size:12.5px;font-weight:700;color:var(--ink);overflow-wrap:anywhere}.is-file small,.is-status small{font-size:12px;color:var(--ink3);overflow-wrap:anywhere}
+.is-status b{font-size:12.5px;font-weight:700}
+.is-status.ok{background:#ecfdf5}.is-status.ok b{color:#15803d}
+.is-status.old{background:var(--amber-soft)}.is-status.old b{color:var(--amber-ink)}
+.is-status.none{background:#f1f5f9}.is-status.none b{color:var(--ink2)}
+.is-btn{width:100%;margin-top:auto}
+.is-drop{font-size:12px;color:var(--ink3);text-align:center}
+@media(max-width:640px){.import-grid{grid-template-columns:1fr}.is-drop{display:none}}
 </style>
 </head>
 <body>
@@ -1122,9 +1142,8 @@ body{min-height:100dvh;background-repeat:no-repeat;background-color:#f5f7fa}
       <select class="sel" id="fType" onchange="render()"><option value="">ทุกหมวดสินค้า</option></select>
     </div>
     <div class="tool-actions">
-      <button class="btn btn-ghost" onclick="document.getElementById('importFile').click()" title="นำเข้า PI (ใบเสนอราคา/pipeline)"><i data-lucide="file-up"></i><span>นำเข้า PI</span></button>
+      <button class="btn btn-ghost import-hub-btn" onclick="openImportHub()" title="นำเข้าข้อมูล: ใบเสนอราคา · ยอดขาย · ลูกหนี้ · เคลม"><i data-lucide="file-up"></i><span>นำเข้าข้อมูล</span></button>
       <input type="file" id="importFile" accept=".xls,.html,.htm" style="display:none" onchange="importPI(this)">
-      <button class="btn btn-ghost" onclick="document.getElementById('importSalesFile').click()" title="นำเข้ายอดขายจริง (ไฟล์สรุปยอดขาย .xlsx)"><i data-lucide="trending-up"></i><span>นำเข้ายอดขาย</span></button>
       <input type="file" id="importSalesFile" accept=".xlsx" style="display:none" onchange="importSales(this)">
       <input type="file" id="importClaimFile" accept=".xlsx" style="display:none" onchange="importClaims(this)">
       <input type="file" id="importArFile" accept=".xlsx,.pdf,.txt,.csv" style="display:none" onchange="importAR(this)">
@@ -1174,6 +1193,7 @@ body{min-height:100dvh;background-repeat:no-repeat;background-color:#f5f7fa}
   <button type="button" role="menuitem" class="mobile-more-item" data-view="exec" onclick="setView('exec')"><i data-lucide="presentation"></i><span>ผู้บริหาร</span></button>
   <button type="button" role="menuitem" class="mobile-more-item" data-view="claims" onclick="setView('claims')"><i data-lucide="shield-check"></i><span>เคลมสินค้า</span></button>
   <button type="button" role="menuitem" class="mobile-more-item" data-view="ar" onclick="setView('ar')"><i data-lucide="receipt-text"></i><span>ลูกหนี้</span></button>
+  <button type="button" role="menuitem" class="mobile-more-item" onclick="closeMobileMore();openImportHub()"><i data-lucide="file-up"></i><span>นำเข้าข้อมูล</span></button>
   <button type="button" role="menuitem" class="mobile-more-item mobile-refresh-btn" onclick="closeMobileMore();safeRefreshApp(this)" aria-label="รีเฟรชหน้าจอและไฟล์ข้อมูลในเครื่อง">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.1 9A7 7 0 0 0 6.2 6.4L4 9M5.9 15A7 7 0 0 0 17.8 17.6L20 15"/></svg><span>รีเฟรชข้อมูลในเครื่อง</span>
   </button>
@@ -1239,6 +1259,18 @@ body{min-height:100dvh;background-repeat:no-repeat;background-color:#f5f7fa}
 </div>
 
 <!-- Settings / sync modal -->
+<div class="ov" id="importOv" onclick="if(event.target===this)closeImportHub()">
+  <div class="modal import-modal" role="dialog" aria-modal="true" aria-labelledby="importHubTitle">
+    <div class="modal-hd">
+      <h3 id="importHubTitle"><i data-lucide="file-up"></i>นำเข้าข้อมูล</h3>
+      <button class="x" onclick="closeImportHub()" aria-label="ปิด"><i data-lucide="x"></i></button>
+    </div>
+    <div class="modal-bd">
+      <p class="import-hint">เลือกช่องให้ตรงกับชนิดไฟล์ แล้วกดเลือกไฟล์ หรือลากไฟล์มาวางในช่องนั้น · แต่ละช่องบอกข้อมูลชุดล่าสุดที่อยู่ในแอป</p>
+      <div class="import-grid" id="importGrid"></div>
+    </div>
+  </div>
+</div>
 <div class="ov" id="setOv">
   <div class="modal">
     <div class="modal-hd">
@@ -4367,6 +4399,54 @@ function autoImportReport(again){
   render();
   toast(`อัปเดตจาก ${f.name} · ${deals.length} ใบ · ใหม่ ${r.created} · เปลี่ยน ${r.updated}`+(r.reviews?` · ⚠ ตรวจสอบ ${r.reviews}`:''),'ok');
 }
+
+/* ===================== ศูนย์นำเข้าข้อมูล: แยกช่องตามชนิดไฟล์ ===================== */
+const IMPORT_SLOTS=[
+  {id:'pi',    icon:'file-up',      title:'ใบเสนอราคา / PI',  input:'importFile',      run:f=>importPI(f),
+   file:'Report_sale_YYYYMMDD.xls', from:'export "Report ยอดขาย" จาก ERP', accept:/\.(xls|html?)$/i, to:'ภาพรวม · ตาราง · Kanban'},
+  {id:'sales', icon:'trending-up',  title:'ยอดขายจริง',        input:'importSalesFile', run:f=>importSales(f),
+   file:'สรุปยอดขาย แบบแจกแจง .xlsx', from:'ไฟล์สรุปยอดขายจากบัญชี', accept:/\.xlsx$/i, to:'ยอดขาย · ผู้บริหาร'},
+  {id:'ar',    icon:'receipt-text', title:'ลูกหนี้ค้างรับ',     input:'importArFile',    run:f=>importAR(f),
+   file:'รายงานลูกหนี้ค้างรับ วว-ดด-ปปปป .pdf', from:'รายงานจากบัญชี (PDF หรือ Excel)', accept:/\.(pdf|xlsx|txt|csv)$/i, to:'ลูกหนี้ · ผู้บริหาร'},
+  {id:'claim', icon:'shield-check', title:'เคลมสินค้า',        input:'importClaimFile', run:f=>importClaims(f),
+   file:'ไฟล์เคลมสินค้า .xlsx', from:'ตารางเคลมสินค้า', accept:/\.xlsx$/i, to:'เคลมสินค้า · ผู้บริหาร'}
+];
+// ข้อมูลชุดล่าสุดของแต่ละช่อง: {date, source, count}
+function importSlotStatus(id){
+  if(id==='pi'){ const m=reportMeta(), n=DATA.filter(p=>p.piRef).length; return {date:(m&&m.date)||PI_ITEMS.latestPiDate||'', source:(m&&m.name)||(n?PI_ITEMS.source:'')||'', count:n?`${n} ใบ`:''}; }
+  if(id==='sales'){ const ys=SALES_HISTORY.years||[], n=ys.reduce((a,y)=>a+((y.invoices||[]).length),0); return {date:SALES_HISTORY.latestDate||'', source:SALES_HISTORY.source||'', count:n?`${n.toLocaleString()} บิล · ${ys.length} ปี`:''}; }
+  if(id==='ar'){ const sn=latestAR(); return sn?{date:sn.date||'', source:sn.source||'', count:`${sn.rows.length} ${sn.kind==='customer'?'ลูกหนี้':'รายการ'}`}:{date:'',source:'',count:''}; }
+  const n=(CLAIMS.rows||[]).length; return {date:CLAIMS.latestDate||'', source:CLAIMS.source||'', count:n?`${n} รายการ`:''};
+}
+function renderImportHub(){
+  const g=$('importGrid'); if(!g) return;
+  g.innerHTML=IMPORT_SLOTS.map(sl=>{
+    const st=importSlotStatus(sl.id), age=dataAgeDays(st.date), has=!!(st.date||st.count);
+    const ageTx=age==null?'':(age===0?'วันนี้':`${age} วันก่อน`);
+    return `<div class="import-slot${has?'':' no-data'}" data-slot="${sl.id}" ondragover="importSlotDrag(event,true)" ondragleave="importSlotDrag(event,false)" ondrop="importSlotDrop(event,'${sl.id}')">
+      <div class="is-head"><span class="is-ic"><i data-lucide="${sl.icon}"></i></span><div><b>${sl.title}</b><small>ใช้ในหน้า ${sl.to}</small></div></div>
+      <div class="is-file"><span>ไฟล์ที่ใช้</span><b>${esc(sl.file)}</b><small>${esc(sl.from)}</small></div>
+      <div class="is-status ${has?(age!=null&&age>7?'old':'ok'):'none'}">${has
+        ? `<b>ข้อมูลถึง ${st.date?fmtSalesDate(st.date):'—'}${ageTx?` · ${ageTx}`:''}</b><small>${esc([st.count,st.source].filter(Boolean).join(' · '))}</small>`
+        : `<b>ยังไม่มีข้อมูล</b><small>ยังไม่เคยนำเข้าไฟล์ชนิดนี้ในเครื่องนี้</small>`}</div>
+      <button type="button" class="btn btn-primary is-btn" onclick="pickImportSlot('${sl.id}')"><i data-lucide="file-up"></i>เลือกไฟล์</button>
+      <div class="is-drop">หรือลากไฟล์มาวางที่ช่องนี้</div>
+    </div>`;
+  }).join('');
+  icons();
+}
+function openImportHub(){ renderImportHub(); $('importOv').classList.add('show'); }
+function closeImportHub(){ $('importOv').classList.remove('show'); }
+function pickImportSlot(id){ const sl=IMPORT_SLOTS.find(x=>x.id===id); if(!sl) return; closeImportHub(); $(sl.input).click(); }
+function importSlotDrag(e,on){ e.preventDefault(); e.currentTarget.classList.toggle('drag',!!on); }
+function importSlotDrop(e,id){
+  e.preventDefault(); e.currentTarget.classList.remove('drag');
+  const sl=IMPORT_SLOTS.find(x=>x.id===id), f=e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files[0]; if(!sl||!f) return;
+  // กันวางไฟล์ผิดช่อง: ชนิดไฟล์ต้องตรงกับช่อง
+  if(!sl.accept.test(f.name)){ toast(`ไฟล์ "${f.name}" ไม่ใช่ชนิดที่ช่อง "${sl.title}" รับ (${sl.file})`,'err'); return; }
+  closeImportHub(); sl.run({files:[f],value:''});
+}
+document.addEventListener('keydown',e=>{ if(e.key==='Escape'&&$('importOv')&&$('importOv').classList.contains('show')) closeImportHub(); });
 
 function emptyState(){
   return `<div class="empty">
