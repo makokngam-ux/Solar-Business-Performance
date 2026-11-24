@@ -1091,6 +1091,13 @@ body{min-height:100dvh;background-repeat:no-repeat;background-color:#f5f7fa}
 .is-btn{width:100%;margin-top:auto}
 .is-drop{font-size:12px;color:var(--ink3);text-align:center}
 @media(max-width:640px){.import-grid{grid-template-columns:1fr}.is-drop{display:none}}
+
+/* ช่องนำเข้าแบบแถบ (รูปแบบเดียวกันทุกหน้า) */
+.import-bar{display:grid;grid-template-columns:40px minmax(0,1.1fr) minmax(0,1fr) auto;gap:12px;align-items:center;border:1.5px solid var(--line);border-radius:16px;padding:12px 14px;background:#fff;margin-bottom:14px;box-shadow:var(--shadow);transition:border-color .15s,background .15s,box-shadow .15s}
+.import-bar.drag{border-color:var(--accent);border-style:dashed;background:#f0fdfa;box-shadow:0 0 0 4px rgba(15,118,110,.1)}
+.ib-main{min-width:0}.ib-main b{display:block;font-size:14px;font-weight:700;color:var(--ink)}.ib-main span{display:block;font-size:12px;color:var(--ink3);margin-top:2px;overflow-wrap:anywhere}
+.import-bar .ib-btn{min-height:44px;white-space:nowrap}
+@media(max-width:760px){.import-bar{grid-template-columns:40px minmax(0,1fr);row-gap:10px}.import-bar .is-status,.import-bar .ib-btn{grid-column:1/-1}}
 </style>
 </head>
 <body>
@@ -2755,7 +2762,7 @@ function renderSales(){
     ? smartInsightHTML('users','Insight ลูกค้าที่เลือก',`${selected.name} ซื้อสะสม ${selected.years.size} ปี · ปี ${yd.year} มียอด ${fmtTHB((selected.byYear[yd.year]||{}).amount||0)}`,`${selected.bills.size} บิล`,'')
     : smartInsightHTML('sparkles','ไฮไลต์ประจำหน้ายอดขาย',`${topMonth?.amount?`เดือนพีคคือ ${topMonth.label} · ${fmtTHB(topMonth.amount)}`:'ยังไม่มีเดือนพีค'}${topCustomer?` · ลูกค้าท็อปคือ ${topCustomer.name}`:''}${topProduct?` · สินค้าท็อปคือ ${topProduct.code}`:''}`,topCustomer?fmtTHB(topCustomer.amount):fmtTHB(yd.sales),'');
 
-  box.innerHTML=`<div class="sales-head"><div class="sales-title"><h2>ยอดขายย้อนหลัง · ปี ${yd.year}</h2><p>คลิกลูกค้าเพื่อเจาะดูยอดขาย บิล และสินค้า</p></div><div class="year-pills">${pills}</div></div>${salesInsight}${searchPanel}<div class="sales-kpis"><div class="sales-kpi"><span>ยอดขายสุทธิ</span><b>${fmtTHB(yd.sales)}</b><small>${growthSmall}</small></div><div class="sales-kpi"><span>จำนวนบิล</span><b>${yd.billCount}</b><small>${yd.creditCount||0} ใบลดหนี้</small></div><div class="sales-kpi"><span>จำนวนลูกค้า</span><b>${yd.customerCount}</b><small>อ้างอิงรหัสลูกหนี้</small></div><div class="sales-kpi"><span>ยอดเฉลี่ยต่อบิล</span><b>${fmtTHB(avgBill)}</b><small>ยอดสุทธิ ÷ จำนวนบิล</small></div></div><div class="sales-grid"><div class="panel"><h3><i data-lucide="trending-up"></i>ยอดขายรายเดือน <span class="panel-note">${prev?`ปี ${yd.year} เทียบ ${prev.year}`:`ปี ${yd.year}`}</span>${monthLegend}</h3><div class="monthly-chart">${monthHtml}</div></div><div class="panel"><h3><i data-lucide="users"></i>Top Customers <span class="rank-controls"><button class="rank-btn ${salesRankBy==='sales'?'active':''}" onclick="setSalesRank('sales')">ยอดขาย</button><button class="rank-btn ${salesRankBy==='bills'?'active':''}" onclick="setSalesRank('bills')">จำนวนบิล</button></span></h3><div class="rank-list">${rankHtml}</div></div></div>${drill}<div class="dash-grid"><div class="panel"><h3><i data-lucide="package"></i>Top สินค้า <span class="rank-controls"><button class="rank-btn ${salesProductView==='brand'?'active':''}" onclick="setSalesProductView('brand')">แบรนด์</button><button class="rank-btn ${salesProductView==='category'?'active':''}" onclick="setSalesProductView('category')">หมวด</button><button class="rank-btn ${salesProductView==='sku'?'active':''}" onclick="setSalesProductView('sku')">SKU</button></span></h3><div class="rank-list">${productHtml}</div></div><div class="panel"><h3><i data-lucide="folder-open"></i>ที่มาของข้อมูล</h3><div class="sync-box"><b>${esc(SALES_HISTORY.source||'ไฟล์ยอดขาย')}</b><div style="margin-top:7px">ชีต: ${esc(yd.sourceSheet||String(yd.year))}</div><div>เอกสารทั้งหมด ${(yd.invoices||[]).length} รายการ · บิลขาย ${yd.billCount} · ใบลดหนี้ ${yd.creditCount||0}</div></div><div class="privacy-note">หน้ารายงานนี้เก็บเฉพาะรหัสลูกค้า ชื่อลูกค้า เลขบิล สินค้า จำนวน และยอดขาย—ไม่มีเบอร์โทร Tax ID หรือที่อยู่</div></div></div>${renderSalesAnalytics()}`;
+  box.innerHTML=`<div class="sales-head"><div class="sales-title"><h2>ยอดขายย้อนหลัง · ปี ${yd.year}</h2><p>คลิกลูกค้าเพื่อเจาะดูยอดขาย บิล และสินค้า</p></div><div class="year-pills">${pills}</div></div>${importBar('sales')}${salesInsight}${searchPanel}<div class="sales-kpis"><div class="sales-kpi"><span>ยอดขายสุทธิ</span><b>${fmtTHB(yd.sales)}</b><small>${growthSmall}</small></div><div class="sales-kpi"><span>จำนวนบิล</span><b>${yd.billCount}</b><small>${yd.creditCount||0} ใบลดหนี้</small></div><div class="sales-kpi"><span>จำนวนลูกค้า</span><b>${yd.customerCount}</b><small>อ้างอิงรหัสลูกหนี้</small></div><div class="sales-kpi"><span>ยอดเฉลี่ยต่อบิล</span><b>${fmtTHB(avgBill)}</b><small>ยอดสุทธิ ÷ จำนวนบิล</small></div></div><div class="sales-grid"><div class="panel"><h3><i data-lucide="trending-up"></i>ยอดขายรายเดือน <span class="panel-note">${prev?`ปี ${yd.year} เทียบ ${prev.year}`:`ปี ${yd.year}`}</span>${monthLegend}</h3><div class="monthly-chart">${monthHtml}</div></div><div class="panel"><h3><i data-lucide="users"></i>Top Customers <span class="rank-controls"><button class="rank-btn ${salesRankBy==='sales'?'active':''}" onclick="setSalesRank('sales')">ยอดขาย</button><button class="rank-btn ${salesRankBy==='bills'?'active':''}" onclick="setSalesRank('bills')">จำนวนบิล</button></span></h3><div class="rank-list">${rankHtml}</div></div></div>${drill}<div class="dash-grid"><div class="panel"><h3><i data-lucide="package"></i>Top สินค้า <span class="rank-controls"><button class="rank-btn ${salesProductView==='brand'?'active':''}" onclick="setSalesProductView('brand')">แบรนด์</button><button class="rank-btn ${salesProductView==='category'?'active':''}" onclick="setSalesProductView('category')">หมวด</button><button class="rank-btn ${salesProductView==='sku'?'active':''}" onclick="setSalesProductView('sku')">SKU</button></span></h3><div class="rank-list">${productHtml}</div></div><div class="panel"><h3><i data-lucide="folder-open"></i>ที่มาของข้อมูล</h3><div class="sync-box"><b>${esc(SALES_HISTORY.source||'ไฟล์ยอดขาย')}</b><div style="margin-top:7px">ชีต: ${esc(yd.sourceSheet||String(yd.year))}</div><div>เอกสารทั้งหมด ${(yd.invoices||[]).length} รายการ · บิลขาย ${yd.billCount} · ใบลดหนี้ ${yd.creditCount||0}</div></div><div class="privacy-note">หน้ารายงานนี้เก็บเฉพาะรหัสลูกค้า ชื่อลูกค้า เลขบิล สินค้า จำนวน และยอดขาย—ไม่มีเบอร์โทร Tax ID หรือที่อยู่</div></div></div>${renderSalesAnalytics()}`;
   icons();
   // มือถือ: เลื่อนแถบปีให้เห็นปีที่เลือกอยู่
   const ap=box.querySelector('.year-pill.active'), pw=ap&&ap.parentElement;
@@ -2853,7 +2860,7 @@ function renderTable(){
       <td class="mono" style="font-size:12.5px;color:var(--ink2);white-space:nowrap">${p.close?fmtSalesDate(p.close):'—'}</td>
     </tr>`;
   }).join('');
-  $('view-table').innerHTML=`<div class="tbl-wrap"><div class="tbl-scroll"><table class="pipe-tbl">
+  $('view-table').innerHTML=`${importBar('pi')}<div class="tbl-wrap"><div class="tbl-scroll"><table class="pipe-tbl">
     <thead><tr>
       ${sortTh('name','โครงการ')}
       <th class="nosort">PI / รายการสินค้า</th>
@@ -3816,7 +3823,7 @@ function renderClaimExecutiveSummary(stats){
 function renderClaims(){
   const box=$('view-claims'); if(!box) return;
   const rows=CLAIMS.rows||[];
-  const upload=`<div class="claim-upload"><span class="cu-ic"><i data-lucide="file-up"></i></span><div><b>นำเข้าไฟล์สินค้าเคลม</b><span>${CLAIMS.source?`ไฟล์ล่าสุด: ${esc(CLAIMS.source)} · ถึง ${CLAIMS.latestDate?fmtSalesDate(CLAIMS.latestDate):'—'}`:'รองรับไฟล์ Excel .xlsx เช่น สินค้าเคลม 2026.xlsx'}</span></div><button class="btn btn-primary" onclick="document.getElementById('importClaimFile').click()"><i data-lucide="file-up"></i>เลือกไฟล์เคลม</button></div>`;
+  const upload=importBar('claim');   // ช่องนำเข้าแบบเดียวกันทุกหน้า
   if(!rows.length){ box.innerHTML=`<div class="claim-head"><div class="claim-title"><h2>เคลมสินค้า</h2><p>นำเข้าไฟล์เคลมเพื่อดูรุ่นที่เคลมบ่อย ลูกค้าที่มีเคลม และสถานะ RMA</p></div></div>${upload}<div class="empty"><i data-lucide="shield-check"></i><h4>ยังไม่มีข้อมูลสินค้าเคลม</h4><p>กดเลือกไฟล์เคลมเพื่อเริ่มวิเคราะห์ โดยข้อมูลจะเก็บแยกจากยอดขายและ PI</p></div>`; icons(); return; }
   const allStats=claimStats(rows), list=filteredClaims(), chartList=filteredClaims(true), stats=claimStats(list), chartStats=claimStats(chartList);
   const statusOptions=[['','ทุกสถานะ'],['wait','รอ RMA'],['progress','In Progress'],['rma','ได้ RMA แล้ว'],['ship','จัดส่ง/รับเองแล้ว']].map(([v,l])=>`<option value="${v}" ${claimStatus===v?'selected':''}>${l}</option>`).join('');
@@ -4232,7 +4239,7 @@ window.addEventListener('resize',()=>{ clearTimeout(window._arFitT); window._arF
 function renderAR(){
   const box=$('view-ar'); if(!box) return;
   const snap=latestAR(), prev=previousAR();
-  const upload=`<div class="ar-upload"><span class="cu-ic"><i data-lucide="receipt-text"></i></span><div><b>นำเข้ารายงานลูกหนี้ค้างรับ</b><span>${snap?`รอบล่าสุด: ${fmtSalesDate(snap.date)} · ${esc(snap.source||'—')} · เก็บไว้ ${AR_DATA.snapshots.length} รอบ`:'รับไฟล์ PDF จากบัญชี หรือ Excel .xlsx · ระบบเก็บ snapshot ไว้เทียบรอบถัดไป'}</span></div><button class="btn btn-primary" onclick="document.getElementById('importArFile').click()"><i data-lucide="file-up"></i>เลือกไฟล์ลูกหนี้</button></div>`;
+  const upload=importBar('ar');   // ช่องนำเข้าแบบเดียวกันทุกหน้า
   const sheetButtons=`<button class="btn btn-ghost" onclick="pushAppDataNow()"><i data-lucide="cloud-upload"></i>ซิงก์ขึ้นชีต</button><button class="btn btn-ghost" onclick="pullAppDataNow()"><i data-lucide="cloud-download"></i>ดึงจากชีต</button>`;
   if(!snap){ box.innerHTML=`<div class="ar-head"><div class="ar-title"><h2>ลูกหนี้</h2><p>นำเข้ารายงานลูกหนี้เพื่อดูยอดค้าง Aging และความเคลื่อนไหวการชำระเงิน</p></div><div class="ar-actions">${sheetButtons}</div></div>${upload}<div class="empty"><i data-lucide="receipt-text"></i><h4>ยังไม่มีข้อมูลลูกหนี้</h4><p>นำเข้าไฟล์รายงานลูกหนี้ค้างรับก่อน ระบบจะเก็บแต่ละรอบไว้เบื้องหลังเพื่อเทียบการจ่ายเงิน</p></div>`; icons(); return; }
   const cmp=compareARSnapshot(JSON.parse(JSON.stringify(snap)),prev), cur=cmp.current, rows=filteredARRows().rows, stats=arStats(cur,cmp.closed), visibleStats=arStats(rows.filter(r=>r.motion!=='closed'),rows.filter(r=>r.motion==='closed'));
@@ -4415,7 +4422,7 @@ const IMPORT_SLOTS=[
 function importSlotStatus(id){
   if(id==='pi'){ const m=reportMeta(), n=DATA.filter(p=>p.piRef).length; return {date:(m&&m.date)||PI_ITEMS.latestPiDate||'', source:(m&&m.name)||(n?PI_ITEMS.source:'')||'', count:n?`${n} ใบ`:''}; }
   if(id==='sales'){ const ys=SALES_HISTORY.years||[], n=ys.reduce((a,y)=>a+((y.invoices||[]).length),0); return {date:SALES_HISTORY.latestDate||'', source:SALES_HISTORY.source||'', count:n?`${n.toLocaleString()} บิล · ${ys.length} ปี`:''}; }
-  if(id==='ar'){ const sn=latestAR(); return sn?{date:sn.date||'', source:sn.source||'', count:`${sn.rows.length} ${sn.kind==='customer'?'ลูกหนี้':'รายการ'}`}:{date:'',source:'',count:''}; }
+  if(id==='ar'){ const sn=latestAR(); return sn?{date:sn.date||'', source:sn.source||'', count:`${sn.rows.length} ${sn.kind==='customer'?'ลูกหนี้':'รายการ'} · เก็บไว้ ${(AR_DATA.snapshots||[]).length} รอบ`}:{date:'',source:'',count:''}; }
   const n=(CLAIMS.rows||[]).length; return {date:CLAIMS.latestDate||'', source:CLAIMS.source||'', count:n?`${n} รายการ`:''};
 }
 function renderImportHub(){
@@ -4434,6 +4441,20 @@ function renderImportHub(){
     </div>`;
   }).join('');
   icons();
+}
+// ช่องนำเข้าแบบแถบ ใช้รูปแบบเดียวกันทุกหน้า: ไอคอน · ชื่อและไฟล์ที่ใช้ · ข้อมูลชุดล่าสุด · ปุ่มเลือกไฟล์ (ลากไฟล์มาวางได้)
+function importBar(id){
+  const sl=IMPORT_SLOTS.find(x=>x.id===id); if(!sl) return '';
+  const st=importSlotStatus(id), age=dataAgeDays(st.date), has=!!(st.date||st.count);
+  const ageTx=age==null?'':(age===0?'วันนี้':`${age} วันก่อน`);
+  return `<div class="import-bar" data-slot="${id}" ondragover="importSlotDrag(event,true)" ondragleave="importSlotDrag(event,false)" ondrop="importSlotDrop(event,'${id}')">
+    <span class="is-ic"><i data-lucide="${sl.icon}"></i></span>
+    <div class="ib-main"><b>นำเข้า${sl.title}</b><span>ไฟล์: ${esc(sl.file)} · ${esc(sl.from)}</span></div>
+    <div class="is-status ${has?(age!=null&&age>7?'old':'ok'):'none'}">${has
+      ? `<b>ข้อมูลถึง ${st.date?fmtSalesDate(st.date):'—'}${ageTx?` · ${ageTx}`:''}</b><small>${esc([st.count,st.source].filter(Boolean).join(' · '))}</small>`
+      : `<b>ยังไม่มีข้อมูล</b><small>ยังไม่เคยนำเข้าไฟล์ชนิดนี้ในเครื่องนี้</small>`}</div>
+    <button type="button" class="btn btn-primary ib-btn" onclick="document.getElementById('${sl.input}').click()"><i data-lucide="file-up"></i>เลือกไฟล์</button>
+  </div>`;
 }
 function openImportHub(){ renderImportHub(); $('importOv').classList.add('show'); }
 function closeImportHub(){ $('importOv').classList.remove('show'); }
