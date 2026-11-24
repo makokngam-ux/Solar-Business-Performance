@@ -1960,7 +1960,9 @@ function renderExecutive(){
   const arTop=ars.companies[0], claimTop=cs.products[0], salesTitle=salesY?`ปี ${salesY.year}`:'ยังไม่มีไฟล์ยอดขาย';
   const focusHtml=[
     signal('phone','warn','งานติดตามวันนี้',`โทร/ติดตาม ${calls.length} · เลยกำหนด ${overdueDeals.length} · ไม่มี Next Action ${stale.length}`,focusCount,'openTodayWork("call")'),
-    signal('receipt-text','bad','ลูกหนี้เกินกำหนด',snap?`${ars.invoices} Invoice · รอบ ${fmtSalesDate(snap.date)}`:'ยังไม่มีไฟล์ลูกหนี้',fmtTHB(ars.overdue),'setView("ar")'),
+    (arNoAging(snap)
+      ? signal('receipt-text','warn','ลูกหนี้ค้างรับ',`${ars.invoices} ลูกหนี้ · รอบ ${fmtSalesDate(snap.date)} · ไม่มีอายุหนี้`,fmtTHB(ars.total),'setView("ar")')
+      : signal('receipt-text','bad','ลูกหนี้เกินกำหนด',snap?`${ars.invoices} Invoice · รอบ ${fmtSalesDate(snap.date)}`:'ยังไม่มีไฟล์ลูกหนี้',fmtTHB(ars.overdue),'setView("ar")')),
     signal('shield-check',claimPending?'warn':'good','เคลมรอติดตาม',claimRows.length?'รอ RMA/In Progress/ไม่มีวันส่งเคลม':'ยังไม่มีไฟล์เคลม',claimPending+' รายการ','setView("claims")'),
     signal('trending-up','good','ยอดขายจริงล่าสุด',salesTitle+(SALES_HISTORY.latestDate?` · ถึง ${fmtSalesDate(SALES_HISTORY.latestDate)}`:''),fmtTHB(salesVal),'setView("sales")')
   ].join('');
@@ -1977,10 +1979,10 @@ function renderExecutive(){
   const arRatio=ars.total?ars.overdue/ars.total:0, claimRatio=claimRows.length?claimPending/claimRows.length:0, overdueRatio=open.length?overdueDeals.length/open.length:0;
   const salesHealth=salesTarget?targetPct>=85?'good':targetPct>=60?'warn':'bad':(salesVal?'good':'warn');
   const pipelineHealth=overdueRatio>=.2||stale.length>=5?'bad':(overdueDeals.length||stale.length?'warn':'good');
-  const arHealth=arRatio>=.5?'bad':(ars.overdue>0?'warn':'good');
+  const arHealth=arNoAging(snap)?'warn':(arRatio>=.5?'bad':(ars.overdue>0?'warn':'good'));   // รายงานสรุปไม่มีอายุหนี้ → ไม่ขึ้นเขียวเอง
   const claimHealth=claimRatio>=.35?'bad':(claimPending?'warn':'good');
   const light=(cls,title,sub)=>`<div class="exec-light ${cls}"><span class="exec-dot"></span><div><b>${title}</b><span>${sub}</span></div></div>`;
-  const healthHtml=`<div class="exec-health-grid">${light(salesHealth,'ยอดขายเทียบเป้า',salesTarget?`${targetPct}% ของเป้าปี · ปิดได้ ${fmtTHB(wonVal)}`:'ยังไม่ตั้งเป้าปี')}${light(pipelineHealth,'Pipeline / ดีล',`${overdueDeals.length} เลยกำหนด · ${stale.length} ไม่มี Next Action`)}${light(arHealth,'ลูกหนี้',`${fmtTHB(ars.overdue)} เกินกำหนด · ${Math.round(arRatio*100)||0}% ของยอดค้าง`)}${light(claimHealth,'เคลมสินค้า',`${claimPending} รายการรอติดตาม · ${claimRows.length} รายการทั้งหมด`)}</div>`;
+  const healthHtml=`<div class="exec-health-grid">${light(salesHealth,'ยอดขายเทียบเป้า',salesTarget?`${targetPct}% ของเป้าปี · ปิดได้ ${fmtTHB(wonVal)}`:'ยังไม่ตั้งเป้าปี')}${light(pipelineHealth,'Pipeline / ดีล',`${overdueDeals.length} เลยกำหนด · ${stale.length} ไม่มี Next Action`)}${light(arHealth,'ลูกหนี้',arNoAging(snap)?`ค้างรับ ${fmtTHB(ars.total)} · รายงานสรุปไม่มีอายุหนี้`:`${fmtTHB(ars.overdue)} เกินกำหนด · ${Math.round(arRatio*100)||0}% ของยอดค้าง`)}${light(claimHealth,'เคลมสินค้า',`${claimPending} รายการรอติดตาม · ${claimRows.length} รายการทั้งหมด`)}</div>`;
   const decisions=[];
   if(arTop&&ars.overdue>0) decisions.push({t:`เร่งติดตามลูกหนี้รายใหญ่: ${arTop[0]}`,d:`ยอดค้างรวม ${fmtTHB(arTop[1])} · ยอดเกินกำหนดทั้งระบบ ${fmtTHB(ars.overdue)}`});
   if(claimTop&&claimPending>0) decisions.push({t:`ตรวจเคลมรุ่น ${claimTop[0]}`,d:`เป็นรุ่นที่เคลมสูงสุด ${claimTop[1]} รายการ · มีเคลมรอติดตาม ${claimPending} รายการ`});
@@ -2010,10 +2012,10 @@ function renderExecutive(){
       {name:'ต้องเร่งแก้',value:healthCounts.bad,color:'#dc2626',format:v=>v+' หมวด'}
     ],`${bannerScore}/4`,'หมวดสีเขียว','ดูจากยอดขาย Pipeline ลูกหนี้ และเคลมสินค้า')}
     ${donutCard('สัดส่วนลูกหนี้','pie-chart',[
-      {name:'ยังไม่เกินกำหนด',value:arCurrentAmount,color:'#16a34a',format:v=>fmtChartTHB(v)},
+      {name:arNoAging(snap)?'ค้างรับ (ไม่มีอายุหนี้)':'ยังไม่เกินกำหนด',value:arCurrentAmount,color:arNoAging(snap)?'#f5b700':'#16a34a',format:v=>fmtChartTHB(v)},
       {name:'เกินกำหนด',value:ars.overdue||0,color:'#dc2626',format:v=>fmtChartTHB(v)},
       {name:'ยอดตัด/ปิดแล้ว',value:ars.closedAmount||0,color:'#64748b',format:v=>fmtChartTHB(v)}
-    ],fmtChartTHB(ars.overdue||0),'เกินกำหนด','กดเมนูลูกหนี้เพื่อดูราย Invoice และยอดที่ตัดรอบนี้')}
+    ],arNoAging(snap)?fmtChartTHB(ars.total||0):fmtChartTHB(ars.overdue||0),arNoAging(snap)?'ค้างรับ':'เกินกำหนด',arNoAging(snap)?'รายงานรอบนี้เป็นแบบสรุปรายลูกค้า ไม่มีอายุหนี้':'กดเมนูลูกหนี้เพื่อดูราย Invoice และยอดที่ตัดรอบนี้')}
     ${donutCard('สถานะเคลมสินค้า','rotate-ccw',[
       {name:'รอเคลม / ไม่มีวันส่ง',value:(cs.st.wait||0)+cs.missingSent.length,color:'#dc2626',format:v=>v+' รายการ'},
       {name:'กำลังดำเนินการ',value:cs.st.progress||0,color:'#d99a00',format:v=>v+' รายการ'},
@@ -2023,7 +2025,7 @@ function renderExecutive(){
   const oneMinuteLines=[
     `ยอดขายจริง${salesY?`ปี ${salesY.year}`:''} อยู่ที่ ${fmtTHB(salesVal)} จาก ${billCount} บิล${salesTarget?` และทำได้ ${targetPct}% ของเป้าปี`:''}`,
     `Pipeline เปิดอยู่ ${open.length} ดีล มูลค่ารวม ${fmtTHB(pipeline)} โดย Weighted forecast อยู่ที่ ${fmtTHB(weighted)}`,
-    snap?`ลูกหนี้คงค้างรวม ${fmtTHB(ars.total)} และเกินกำหนด ${fmtTHB(ars.overdue)}${arTop?` โดยรายใหญ่สุดคือ ${arTop[0]} ${fmtTHB(arTop[1])}`:''}`:'ยังไม่มีข้อมูลลูกหนี้ล่าสุดในระบบ',
+    snap?`ลูกหนี้คงค้างรวม ${fmtTHB(ars.total)}${arNoAging(snap)?' (รายงานสรุป ไม่มีอายุหนี้)':` และเกินกำหนด ${fmtTHB(ars.overdue)}`}${arTop?` โดยรายใหญ่สุดคือ ${arTop[0]} ${fmtTHB(arTop[1])}`:''}`:'ยังไม่มีข้อมูลลูกหนี้ล่าสุดในระบบ',
     claimRows.length?`เคลมรอติดตาม ${claimPending} รายการ${claimTop?` รุ่นที่เคลมสูงสุดคือ ${claimTop[0]} ${claimTop[1]} รายการ`:''}`:'ยังไม่มีข้อมูลเคลมสินค้า',
     focusCount?`งานเร่งวันนี้มี ${focusCount} รายการ: โทร/ติดตาม ${calls.length}, ดีลเลยกำหนด ${overdueDeals.length}, ไม่มี Next Action ${stale.length}`:'งานเร่งวันนี้ยังไม่พบสัญญาณเร่งด่วน'
   ];
@@ -2032,7 +2034,7 @@ function renderExecutive(){
   box.innerHTML=`<div class="exec-hero"><h2>สรุปผู้บริหาร</h2><p>หน้าเดียวสำหรับดูสุขภาพธุรกิจ: ยอดขาย Pipeline ลูกหนี้ เคลม และงานที่ต้องจัดการ</p><div class="exec-hero-actions"><button class="btn btn-ghost" onclick="refreshApp()"><i data-lucide="refresh-cw"></i>อัปเดตหน้าจอ</button><button class="btn btn-ghost" onclick="printExecutive()"><i data-lucide="printer"></i>พิมพ์ / PDF</button><button class="btn btn-ghost" onclick="exportBackup()"><i data-lucide="file-down"></i>สำรองข้อมูล</button><button class="btn btn-ghost" onclick="setView('dash')"><i data-lucide="layout-dashboard"></i>ไปภาพรวมเต็ม</button></div></div>
   ${insightBanner}
   ${oneMinuteHtml}
-  <div class="exec-kpis">${kpi('good','trending-up','ยอดขายจริง '+(salesY?`ปี ${salesY.year}`:''),fmtTHB(salesVal),`${billCount} บิล${SALES_HISTORY.latestDate?' · ถึง '+fmtSalesDate(SALES_HISTORY.latestDate):''}`,salesVal,'money')}${kpi('accent','wallet','Pipeline เปิดอยู่',fmtTHB(pipeline),`${open.length} ดีล · Weighted ${fmtTHB(weighted)}`,pipeline,'money')}${kpi(salesTarget&&targetPct<70?'warn':'good','target','ความคืบหน้าเป้าปี',salesTarget?targetPct+'%':'ยังไม่ตั้งเป้า',salesTarget?`เป้า ${fmtTHB(salesTarget)} · ปิดได้ ${fmtTHB(wonVal)}`:'ตั้งเป้าในเมนูตั้งค่า',salesTarget?targetPct:NaN,'percent')}${kpi(ars.overdue?'bad':'good','receipt-text','ลูกหนี้เกินกำหนด',fmtTHB(ars.overdue),snap?`รอบล่าสุด ${fmtSalesDate(snap.date)}`:'ยังไม่มีข้อมูลลูกหนี้',ars.overdue,'money')}</div>
+  <div class="exec-kpis">${kpi('good','trending-up','ยอดขายจริง '+(salesY?`ปี ${salesY.year}`:''),fmtTHB(salesVal),`${billCount} บิล${SALES_HISTORY.latestDate?' · ถึง '+fmtSalesDate(SALES_HISTORY.latestDate):''}`,salesVal,'money')}${kpi('accent','wallet','Pipeline เปิดอยู่',fmtTHB(pipeline),`${open.length} ดีล · Weighted ${fmtTHB(weighted)}`,pipeline,'money')}${kpi(salesTarget&&targetPct<70?'warn':'good','target','ความคืบหน้าเป้าปี',salesTarget?targetPct+'%':'ยังไม่ตั้งเป้า',salesTarget?`เป้า ${fmtTHB(salesTarget)} · ปิดได้ ${fmtTHB(wonVal)}`:'ตั้งเป้าในเมนูตั้งค่า',salesTarget?targetPct:NaN,'percent')}${arNoAging(snap)?kpi('accent','receipt-text','ลูกหนี้ค้างรับ',fmtTHB(ars.total),`รอบล่าสุด ${fmtSalesDate(snap.date)} · ไม่มีอายุหนี้`,ars.total,'money'):kpi(ars.overdue?'bad':'good','receipt-text','ลูกหนี้เกินกำหนด',fmtTHB(ars.overdue),snap?`รอบล่าสุด ${fmtSalesDate(snap.date)}`:'ยังไม่มีข้อมูลลูกหนี้',ars.overdue,'money')}</div>
   ${healthHtml}
   ${donutHtml}
   <div class="exec-note"><b>ข้อสรุปเร็ว:</b> ${notes.map(esc).join(' · ')}${latestDataDate?`<br><small>ข้อมูลล่าสุดที่พบ: ${fmtSalesDate(latestDataDate)}</small>`:''}</div>
@@ -3892,7 +3894,9 @@ function arPaidDelta(r){
   return Math.max(prev-cur,0);
 }
 function latestAR(){ return (AR_DATA.snapshots||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).at(-1)||null; }
-function previousAR(){ const arr=(AR_DATA.snapshots||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))); return arr.length>1?arr.at(-2):null; }
+// รอบก่อนต้องเป็นรายงานชนิดเดียวกับรอบล่าสุด (รายใบ กับ สรุปรายลูกค้า เทียบกันตรง ๆ ไม่ได้)
+function previousAR(){ const arr=(AR_DATA.snapshots||[]).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))); const cur=arr.at(-1); if(!cur) return null; const same=arr.slice(0,-1).filter(x=>(x.kind||'invoice')===(cur.kind||'invoice')); return same.at(-1)||null; }
+function arNoAging(snap){ return !!(snap&&snap.kind==='customer'); }
 function parseMoneyTH(s){ s=String(s||'').trim(); const neg=/^\(.+\)$/.test(s); const n=parseFloat(s.replace(/[(),]/g,'')); return (Number.isFinite(n)?n:0)*(neg?-1:1); }
 function arDateFromFileName(name){
   const m=String(name||'').match(/(\d{1,2})[-_/](\d{1,2})[-_/](25\d{2}|20\d{2})/);
@@ -3908,7 +3912,45 @@ function arAgingBucket(days){
   if(days<=365) return '91-365 วัน';
   return 'เกิน 365 วัน';
 }
+// รายงานลูกหนี้ค้างรับแบบ "สรุปรวมแต่ละลูกหนี้" ที่บัญชีส่งมาเป็น PDF: บรรทัดละ 1 ลูกหนี้
+//   No รหัสลูกหนี้ ชื่อบริษัท ยอดหนี้แจ้ง [ยอดปรับหนี้] [ยอดชำระแล้ว] ยอดคงค้าง   (ช่องที่ว่างไม่มีตัวเลข · ยอดปรับติดลบอยู่ในวงเล็บ)
+// ไม่มีเลขใบกำกับ/วันครบกำหนด จึงไม่มีอายุหนี้ · ตรวจผลรวมกับยอดรวมบนหัวรายงานก่อนยอมนำเข้า
+function parseARSummaryText(lines,fileName){
+  const amtRe=/^\(?-?(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}\)?$/, rowRe=/^(\d+)\s+([A-Z]-\d{5})\s+(.+)$/;
+  const val=t=>{ const n=parseFloat(t.replace(/[(),]/g,'')); return (/^\(/.test(t)&&n>0)?-n:n; };
+  const near=(a,b)=>Math.abs(a-b)<0.015;
+  const rows=[]; let cand=0, bad=0, firstRow=-1;
+  lines.forEach((line,idx)=>{
+    const m=line.match(rowRe); if(!m) return;
+    const toks=m[3].split(' '); const nums=[];
+    while(toks.length&&amtRe.test(toks[toks.length-1])) nums.unshift(val(toks.pop()));
+    if(!nums.length) return;                       // ไม่ใช่บรรทัดรายการ
+    cand++; if(firstRow<0) firstRow=idx;
+    const company=toks.join(' ').trim();
+    let debt, adj=0, paid=0, bal;
+    if(nums.length===2){ [debt,bal]=nums; if(!near(debt,bal)) return void bad++; }
+    else if(nums.length===3){ debt=nums[0]; bal=nums[2];
+      if(near(debt-nums[1],bal)) paid=nums[1]; else if(near(debt+nums[1],bal)) adj=nums[1]; else return void bad++; }
+    else if(nums.length===4){ [debt,adj,paid,bal]=nums; if(!near(debt+adj-paid,bal)) return void bad++; }
+    else return void bad++;
+    if(!company) return void bad++;
+    rows.push({key:m[2], debtorCode:m[2], company, invoiceDate:'', invoiceNo:m[2], type:'สรุปรายลูกค้า', debt, adjustment:adj, paid, balance:bal,
+      overdueDays:0, aging:'ไม่มีข้อมูลอายุหนี้', salesperson:'—', summary:true, rowNo:+m[1]});
+  });
+  if(!rows.length) return null;                    // ไม่ใช่รายงานรูปแบบนี้ → ให้ตัวอ่านแบบรายใบลองต่อ
+  if(bad) throw new Error(`อ่านรายงานลูกหนี้แบบสรุปได้ไม่ครบ: ${bad} จาก ${cand} บรรทัดตัวเลขไม่ลงตัว จึงยังไม่นำเข้า`);
+  // ยอดรวมบนหัวรายงาน (อยู่ก่อนตาราง): ยอดหนี้แจ้ง / ยอดปรับหนี้ / ชำระแล้ว / ยอดคงเหลือ
+  const head=lines.slice(0,firstRow), pick=re=>{ for(const l of head){ if(re.test(l)){ const t=l.trim().split(' ').pop(); if(amtRe.test(t)) return val(t); } } return null; };
+  const hd={debt:pick(/แจ[้]?ง/), adj:pick(/ปรับ/), paid:pick(/ระแล[้]?ว/), bal:pick(/คงเหลือ/)};
+  const sum=k=>rows.reduce((a,r)=>a+(+r[k]||0),0);
+  const chk=[['ยอดหนี้แจ้ง',hd.debt,sum('debt')],['ยอดปรับหนี้',hd.adj,sum('adjustment')],['ชำระแล้ว',hd.paid,sum('paid')],['ยอดคงเหลือ',hd.bal,sum('balance')]].filter(x=>x[1]!=null);
+  const off=chk.filter(x=>Math.abs(x[1]-x[2])>0.05);
+  if(off.length) throw new Error(`ยอดรวมที่อ่านได้ไม่ตรงกับหัวรายงาน (${off.map(x=>x[0]).join(', ')}) จึงยังไม่นำเข้า — อาจอ่านตกบางบรรทัด`);
+  return {source:fileName, kind:'customer', date:arDateFromFileName(fileName), importedAt:new Date().toISOString(), rows, checked:chk.length};
+}
 function parseARReportText(text,fileName){
+  { const pre=String(text||'').split(/\r?\n/).map(s=>s.replace(/\u0000/g,'').replace(/ /g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
+    const sm=parseARSummaryText(pre,fileName); if(sm) return sm; }
   const rows=[], raw=String(text||'').split(/\r?\n/).map(s=>s.replace(/\u0000/g,'').replace(/ /g,' ').replace(/\s+/g,' ').trim()).filter(Boolean);
   const codeRe=/^([A-Z]-\d{5})(?!\d)\s*/, dateRe=/\d{2}\/\d{2}\/25\d{2}/;
   const numRe=/^\(?-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\)?$/;   // รับทั้ง 1,234.50 และ 1234.50
@@ -4051,6 +4093,8 @@ function thaiLooseKey(v){ return String(v||'').replace(/[ัิ-ฺ็-๎\s.]/g
 function repairARNames(snap){
   const byCode=new Map(), byKey=new Map(), dup=new Set();
   (AR_DATA.snapshots||[]).forEach(sn=>{ if(!/\.pdf$/i.test(sn.source||'')) (sn.rows||[]).forEach(r=>{ if(r.debtorCode&&r.company) byCode.set(r.debtorCode,r.company); }); });
+  // ยอดขายย้อนหลังใช้รหัสลูกค้าชุดเดียวกับรหัสลูกหนี้ → ใช้ชื่อเต็มจากที่นั่นได้ (มีทั้งในเครื่องและบนมือถือ)
+  ((typeof SALES_HISTORY!=='undefined'&&SALES_HISTORY&&SALES_HISTORY.years)||[]).forEach(y=>(y.invoices||[]).forEach(v=>{ if(v.customerCode&&v.customer&&!byCode.has(v.customerCode)) byCode.set(v.customerCode,v.customer); }));
   (typeof CUSTOMERS!=='undefined'&&Array.isArray(CUSTOMERS)?CUSTOMERS:[]).forEach(c=>{ const k=thaiLooseKey(c&&c.n); if(!k) return; if(byKey.has(k)&&byKey.get(k)!==c.n) dup.add(k); else byKey.set(k,c.n); });
   let fixed=0;
   (snap.rows||[]).forEach(r=>{
@@ -4127,10 +4171,10 @@ function importAR(input){
     }
     catch(e){ toast(e.message||'นำเข้าลูกหนี้ไม่สำเร็จ','err'); return; }
     const existing=(AR_DATA.snapshots||[]).filter(s=>s.date!==snap.date);
-    const prev=existing.slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))).at(-1)||null;
+    const prev=existing.filter(x=>(x.kind||'invoice')===(snap.kind||'invoice')).sort((a,b)=>String(a.date).localeCompare(String(b.date))).at(-1)||null;
     const cmp=compareARSnapshot(JSON.parse(JSON.stringify(snap)),prev);
     const stats=arStats(cmp.current,cmp.closed);
-    if(!confirm(`พบรายงานลูกหนี้\n\n• วันที่รายงาน ${fmtSalesDate(snap.date)}\n• ${snap.rows.length} รายการ · รวม ${fmtTHB(stats.total)}\n• เทียบรอบก่อน: ปิดแล้ว ${stats.closedCount} ใบ · จ่ายบางส่วน ${cmp.current.filter(r=>r.motion==='partial').length} ใบ\n\nนำเข้ารอบนี้?`)) return;
+    if(!confirm(`พบรายงานลูกหนี้${snap.kind==='customer'?' (แบบสรุปรายลูกค้า · ไม่มีอายุหนี้รายใบ)':''}\n\n• วันที่รายงาน ${fmtSalesDate(snap.date)}\n• ${snap.rows.length} ${snap.kind==='customer'?'ลูกหนี้':'รายการ'} · รวม ${fmtTHB(stats.total)}${snap.checked?' · ตรงกับยอดรวมบนหัวรายงาน':''}\n• เทียบรอบก่อน: ปิดแล้ว ${stats.closedCount} ใบ · จ่ายบางส่วน ${cmp.current.filter(r=>r.motion==='partial').length} ใบ\n\nนำเข้ารอบนี้?`)) return;
     // สำคัญ: การนำเข้าไฟล์ลูกหนี้ใหม่อัปเดตเฉพาะ snapshot จากรายงานเท่านั้น
     // ช่องที่ผู้ใช้กรอกเอง (ชื่อโครงการ/หมายเหตุ/นัดจ่าย/สถานะลูกหนี้) เก็บแยกตามเลข Invoice
     // จึงต้องคงเดิมจนกว่าผู้ใช้จะกดแก้และบันทึกเอง
@@ -4171,17 +4215,20 @@ function renderAR(){
     const receive=arReceiveDate(r), receiveCell=`<div class="ar-receive"><span class="ar-receive-date">${fmtSalesDate(receive)}</span><button type="button" class="ar-receive-edit" onclick="editARReceiveDate('${key}','${esc(r.invoiceDate||'')}')" title="แก้วันรับสินค้า"><i data-lucide="pencil"></i></button></div>`;
     const promiseCell=`<div class="ar-promise"><span class="${promise?'ar-promise-date':'ar-promise-empty'}">${promise?fmtSalesDate(promise):'ยังไม่นัด'}</span><button type="button" class="ar-promise-edit" onclick="editARPromiseDate('${key}')" title="แก้วันที่นัดจ่าย"><i data-lucide="pencil"></i></button></div>`;
     const collectCell=`<div class="ar-collect"><span class="ar-collect-chip ${cst}">${arCollectStatusLabel(cst)}</span><button type="button" class="ar-collect-edit" onclick="editARCollectStatus('${key}')" title="แก้สถานะลูกหนี้"><i data-lucide="pencil"></i></button></div>`;
-    return `<tr><td>${esc(r.debtorCode)}</td><td>${esc(r.invoiceNo)}</td><td>${esc(r.company)}</td><td>${projectCell}</td><td>${fmtSalesDate(r.invoiceDate)}</td><td>${receiveCell}</td><td title="${esc(r.detail||'')}"><span class="ar-detail-chip">${esc(r.detail||'—')}</span></td><td>${promiseCell}</td><td>${collectCell}</td><td>${fmtFull(r.balance)}</td><td>${r.prevBalance==null?'—':fmtFull(r.prevBalance)}</td><td class="ar-paid ${paid?'':'zero'}">${paid?fmtFull(paid):'—'}</td><td>${+r.overdueDays||0}</td><td>${esc(r.aging)}</td><td><span class="ar-status ${r.motion}">${arMotionLabel(r.motion)}</span></td></tr>`;
+    return `<tr><td>${esc(r.debtorCode)}</td><td>${r.summary?'<span style="color:var(--ink3)">สรุปรายลูกค้า</span>':esc(r.invoiceNo)}</td><td>${esc(r.company)}</td><td>${projectCell}</td><td>${fmtSalesDate(r.invoiceDate)}</td><td>${receiveCell}</td><td title="${esc(r.detail||'')}"><span class="ar-detail-chip">${esc(r.detail||'—')}</span></td><td>${promiseCell}</td><td>${collectCell}</td><td>${fmtFull(r.balance)}</td><td>${r.prevBalance==null?'—':fmtFull(r.prevBalance)}</td><td class="ar-paid ${paid?'':'zero'}">${paid?fmtFull(paid):'—'}</td><td>${r.summary?'—':(+r.overdueDays||0)}</td><td>${r.summary?'—':esc(r.aging)}</td><td><span class="ar-status ${r.motion}">${arMotionLabel(r.motion)}</span></td></tr>`;
   }).join('');
   const topAr=stats.companies[0];
   const longDebt=stats.aging['เกิน 365 วัน']||0;
-  const arInsight=visibleStats.overdue
+  const noAging=arNoAging(snap);
+  const arInsight=noAging
+    ? smartInsightHTML('receipt-text','รายงานรอบนี้เป็นแบบสรุปรายลูกค้า',`${topAr?`ลูกหนี้สูงสุดคือ ${topAr[0]} · ${fmtTHB(topAr[1])} · `:''}ไม่มีวันครบกำหนดและอายุหนี้รายใบ จึงยังบอกไม่ได้ว่ายอดไหนเกินกำหนด`,fmtTHB(visibleStats.total),'')
+    : visibleStats.overdue
     ? smartInsightHTML('alert-triangle','ไฮไลต์ประจำหน้าลูกหนี้',`${topAr?`ลูกหนี้สูงสุดคือ ${topAr[0]} · ${fmtTHB(topAr[1])}`:'ดูรายการยอดค้างสูงสุดก่อน'}${longDebt?` · กลุ่มเกิน 365 วัน ${fmtTHB(longDebt)}`:''}`,fmtTHB(visibleStats.overdue),'bad')
     : smartInsightHTML('check-circle-2','ลูกหนี้ในมุมมองนี้ไม่เกินกำหนด','ยังสามารถดูความเคลื่อนไหว เช่น ปิดแล้วรอบล่าสุด หรือจ่ายบางส่วน เพื่อใช้ติดตามต่อได้','OK','');
   box.innerHTML=`<div class="ar-head"><div class="ar-title"><h2>ลูกหนี้</h2><p>สถานะล่าสุดและความเคลื่อนไหวเทียบรอบก่อน · ${prev?`เทียบกับ ${fmtSalesDate(prev.date)}`:'ยังไม่มีรอบก่อนสำหรับเปรียบเทียบ'}</p></div><div class="ar-actions">${sheetButtons}<button class="btn btn-ghost" onclick="document.getElementById('importArFile').click()"><i data-lucide="file-up"></i>นำเข้าไฟล์ใหม่</button><button class="btn btn-ghost" onclick="clearARData()"><i data-lucide="trash-2"></i>ล้างข้อมูลลูกหนี้</button></div></div>${upload}
   ${arInsight}
-  <div class="ar-kpis"><div class="ar-kpi accent"><span>ยอดคงเหลือรวม</span><b>${fmtTHB(visibleStats.total)}</b><small>${rows.length} รายการในมุมมองนี้</small></div><div class="ar-kpi bad"><span>ยอดเกินกำหนด</span><b>${fmtTHB(visibleStats.overdue)}</b><small>เฉพาะรายการที่เกินกำหนด</small></div><div class="ar-kpi"><span>จำนวนลูกค้า</span><b>${visibleStats.customers}</b><small>ตามข้อมูลล่าสุด</small></div><div class="ar-kpi good"><span>ปิดแล้วรอบล่าสุด</span><b>${movements.closed}</b><small>${fmtTHB(stats.closedAmount)}</small></div><div class="ar-kpi warn"><span>จ่ายบางส่วน</span><b>${movements.partial}</b><small>ยอดลดลงจากรอบก่อน</small></div></div>
-  <div class="claim-summary"><div class="claim-summary-card"><span><i data-lucide="receipt-text"></i>ความเคลื่อนไหว</span><b>ใหม่ ${movements.new} · จ่ายบางส่วน ${movements.partial} · ปิดแล้ว ${movements.closed}</b><small>ใช้เลข Invoice เทียบกับรอบก่อน</small></div><div class="claim-summary-card"><span><i data-lucide="building-2"></i>ลูกหนี้สูงสุด</span><b>${stats.companies[0]?`${esc(stats.companies[0][0])} · ${fmtTHB(stats.companies[0][1])}`:'—'}</b><small>กดชื่อในตาราง Top เพื่อดูรายละเอียด</small></div><div class="claim-summary-card"><span><i data-lucide="alert-triangle"></i>เงินค้างนาน</span><b>${fmtTHB(stats.aging['เกิน 365 วัน']||0)}</b><small>กลุ่มที่น่าติดตามใกล้ชิด</small></div></div>
+  <div class="ar-kpis"><div class="ar-kpi accent"><span>ยอดคงเหลือรวม</span><b>${fmtTHB(visibleStats.total)}</b><small>${rows.length} รายการในมุมมองนี้</small></div>${noAging?`<div class="ar-kpi"><span>ยอดเกินกำหนด</span><b>—</b><small>รายงานแบบสรุปไม่มีวันครบกำหนด</small></div>`:`<div class="ar-kpi bad"><span>ยอดเกินกำหนด</span><b>${fmtTHB(visibleStats.overdue)}</b><small>เฉพาะรายการที่เกินกำหนด</small></div>`}<div class="ar-kpi"><span>จำนวนลูกค้า</span><b>${visibleStats.customers}</b><small>ตามข้อมูลล่าสุด</small></div><div class="ar-kpi good"><span>ปิดแล้วรอบล่าสุด</span><b>${movements.closed}</b><small>${fmtTHB(stats.closedAmount)}</small></div><div class="ar-kpi warn"><span>จ่ายบางส่วน</span><b>${movements.partial}</b><small>ยอดลดลงจากรอบก่อน</small></div></div>
+  <div class="claim-summary"><div class="claim-summary-card"><span><i data-lucide="receipt-text"></i>ความเคลื่อนไหว</span><b>ใหม่ ${movements.new} · จ่ายบางส่วน ${movements.partial} · ปิดแล้ว ${movements.closed}</b><small>${noAging?'ใช้รหัสลูกหนี้เทียบกับรอบก่อน':'ใช้เลข Invoice เทียบกับรอบก่อน'}</small></div><div class="claim-summary-card"><span><i data-lucide="building-2"></i>ลูกหนี้สูงสุด</span><b>${stats.companies[0]?`${esc(stats.companies[0][0])} · ${fmtTHB(stats.companies[0][1])}`:'—'}</b><small>กดชื่อในตาราง Top เพื่อดูรายละเอียด</small></div><div class="claim-summary-card"><span><i data-lucide="alert-triangle"></i>เงินค้างนาน</span><b>${fmtTHB(stats.aging['เกิน 365 วัน']||0)}</b><small>กลุ่มที่น่าติดตามใกล้ชิด</small></div></div>
   <div class="ar-grid"><div class="panel"><h3><i data-lucide="building-2"></i>Top ลูกหนี้ค้างรับ</h3><div class="rank-list">${renderARRank(stats.companies,'company')}</div></div><div class="panel"><h3><i data-lucide="users"></i>Top พนักงานขายตามยอดค้าง</h3><div class="rank-list">${renderARRank(stats.sales,'sales')}</div></div></div>
   <div class="ar-grid"><div class="panel"><h3><i data-lucide="history"></i>Aging ลูกหนี้</h3><div class="rank-list">${agingRows||'<div class="empty-mini">ยังไม่มีข้อมูล</div>'}</div></div><div class="panel"><h3><i data-lucide="badge-check"></i>รอบข้อมูลที่เก็บไว้</h3><div class="sync-box">${(AR_DATA.snapshots||[]).slice().reverse().map(s=>`<div>${fmtSalesDate(s.date)} · ${s.rows.length} รายการ · ${esc(s.source||'—')}</div>`).join('')}</div></div></div>
   <div class="ar-tools"><label class="ar-searchbox"><i data-lucide="search"></i><input id="arSearch" value="${esc(arQuery)}" oninput="setARQuery(this.value)" placeholder="ค้นหาลูกค้า / ชื่อโครงการ / หมายเหตุ / รหัสลูกหนี้ / Invoice"></label><select class="sel" onchange="setARAging(this.value)">${agingOptions}</select><select class="sel" onchange="setARCollectStatus(this.value)">${collectOptions}</select><select class="sel" onchange="setARSpecial(this.value)">${specialOptions}</select></div>
